@@ -1,3 +1,8 @@
+# --- PRIMISSIMA COSA DA FARE: CARICARE LE VARIABILI D'AMBIENTE ---
+from dotenv import load_dotenv
+load_dotenv()
+# --------------------------------------------------------------------
+
 import streamlit as st
 import pandas as pd
 import time
@@ -10,31 +15,22 @@ st.set_page_config(page_title="Trading Bot Dashboard", layout="wide", initial_si
 # --- FUNZIONI DI STILE E COUNTDOWN ---
 
 def style_signals_table(df):
-    """Applica la colorazione verde/rosso alla tabella dei segnali."""
     def highlight_signal(row):
         signal_text = str(row.get('signal', '')).upper()
         color = ''
         if 'LONG' in signal_text:
-            color = 'background-color: rgba(46, 139, 87, 0.3);'  # Verde
+            color = 'background-color: rgba(46, 139, 87, 0.3);'
         elif 'SHORT' in signal_text:
-            color = 'background-color: rgba(139, 0, 0, 0.2);'   # Rosso
+            color = 'background-color: rgba(139, 0, 0, 0.2);'
         return [color] * len(row)
     return df.style.apply(highlight_signal, axis=1)
 
 def get_countdown_to_next_interval(interval_minutes):
-    """
-    Calcola il tempo rimanente al prossimo intervallo di X minuti.
-    Esempio: se sono le 10:07 e l'intervallo è 15, la prossima esecuzione è alle 10:15.
-    """
     now = datetime.now()
-    # Calcola quanti minuti sono passati dall'inizio dell'ora
     minutes_past_hour = now.minute
-    # Calcola il numero di intervalli passati
     intervals_past = minutes_past_hour // interval_minutes
-    # Calcola il minuto della prossima esecuzione
     next_run_minute = (intervals_past + 1) * interval_minutes
     
-    # Gestisce il caso in cui la prossima esecuzione è nell'ora successiva
     if next_run_minute >= 60:
         next_run_time = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
     else:
@@ -45,23 +41,22 @@ def get_countdown_to_next_interval(interval_minutes):
     return f"tra {minutes} min e {seconds} sec"
 
 # --- FUNZIONI DI CARICAMENTO DATI ---
-@st.cache_data(ttl=60) # Cache dei dati per 60 secondi
+@st.cache_data(ttl=60)
 def load_data():
-    conn = database.engine.connect()
-    try:
-        performance_df = pd.read_sql("SELECT * FROM performance_log ORDER BY timestamp DESC LIMIT 100", conn)
-        signals_df = pd.read_sql("SELECT * FROM technical_signals ORDER BY last_updated DESC", conn)
-        quality_df = pd.read_sql("SELECT * FROM quality_scores ORDER BY quality_score DESC", conn)
-        positions_df = pd.read_sql("SELECT * FROM open_positions", conn)
-    finally:
-        conn.close()
+    # Usiamo il nuovo session_scope anche per la lettura per coerenza
+    with database.session_scope() as session:
+        performance_df = pd.read_sql("SELECT * FROM performance_log ORDER BY timestamp DESC LIMIT 100", session.bind)
+        signals_df = pd.read_sql("SELECT * FROM technical_signals ORDER BY created_at DESC", session.bind)
+        quality_df = pd.read_sql("SELECT * FROM quality_scores ORDER BY quality_score DESC", session.bind)
+        positions_df = pd.read_sql("SELECT * FROM open_positions", session.bind)
     return performance_df, signals_df, quality_df, positions_df
 
 # --- TITOLO E HEADER ---
-st.title("📈 Trading Bot Dashboard v3.3")
+st.title("📈 Trading Bot Dashboard v3.4 (Env Fix)")
 st.markdown(f"Ultimo aggiornamento della dashboard: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`")
 
 # --- PANNELLO DI STATO DEI SERVIZI ---
+# ... (il resto del file rimane identico) ...
 st.subheader("Stato dei Servizi")
 col1, col2 = st.columns(2)
 with col1:
@@ -78,8 +73,8 @@ performance_df, signals_df, quality_df, positions_df = load_data()
 st.header("Performance Finanziaria")
 if not performance_df.empty:
     latest_perf = performance_df.iloc[0]
-    equity = latest_perf['total_equity']
-    pnl = latest_perf['unrealized_pnl']
+    equity = float(latest_perf['total_equity'])
+    pnl = float(latest_perf['unrealized_pnl'])
     c1, c2 = st.columns(2)
     c1.metric("Total Equity (USDT)", f"${equity:,.2f}")
     c2.metric("Unrealized P&L (USDT)", f"${pnl:,.2f}", delta_color=("inverse" if pnl < 0 else "normal"))

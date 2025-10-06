@@ -1,12 +1,16 @@
 import pandas as pd
-import pandas_ta as ta # Importiamo la nuova libreria
+import pandas_ta as ta
 from datetime import datetime, timedelta
 
 # --- CONFIGURAZIONI STRATEGIA ---
-ATR_MULTIPLIER = 2.0  # Moltiplicatore per lo Stop Loss
-RISK_REWARD_RATIO = 1.5 # Rapporto Rischio/Rendimento per il Take Profit
+ATR_MULTIPLIER = 2.0
+RISK_REWARD_RATIO = 1.5
 
 def get_fundamental_quality_score(asset_info, crypto_bulk_data):
+    """
+    Calcola un punteggio di qualità per un asset.
+    Questa versione garantisce di restituire sempre un punteggio numerico.
+    """
     symbol = asset_info['symbol']
     source = asset_info['source']
     
@@ -17,20 +21,21 @@ def get_fundamental_quality_score(asset_info, crypto_bulk_data):
         return 100, {"Info": "Asset fondamentale, punteggio massimo."}
 
     if symbol in crypto_bulk_data:
-        data = crypto_bulk_data[symbol]
-        market_cap = data.get('market_cap', 0)
-        volume_24h = data.get('total_volume', 0)
-        
-        score = 0
-        if market_cap > 1_000_000_000: score += 40
-        elif market_cap > 500_000_000: score += 20
-        
-        if volume_24h > 100_000_000: score += 40
-        elif volume_24h > 50_000_000: score += 20
+        data = crypto_bulk_data.get(symbol)
+        if data:
+            market_cap = data.get('market_cap', 0) or 0
+            volume_24h = data.get('total_volume', 0) or 0
             
-        return score, {"Market Cap": f"${market_cap:,.0f}", "Volume 24h": f"${volume_24h:,.0f}"}
+            score = 0
+            if market_cap > 1_000_000_000: score += 40
+            elif market_cap > 500_000_000: score += 20
+            
+            if volume_24h > 100_000_000: score += 40
+            elif volume_24h > 50_000_000: score += 20
+                
+            return score, {"Market Cap": f"${market_cap:,.0f}", "Volume 24h": f"${volume_24h:,.0f}"}
 
-    return 0, {"Errore": "Dati non disponibili."}
+    return 0, {"Errore": f"Dati fondamentali non disponibili per {symbol}."}
 
 
 def calculate_sl_tp(df, signal, entry_price):
@@ -40,26 +45,27 @@ def calculate_sl_tp(df, signal, entry_price):
     if df.empty or len(df) < 20:
         return None, None
 
-    # Calcola ATR
     df.ta.atr(length=14, append=True)
-    last_atr = df['ATRr_14'].iloc[-1]
     
-    if pd.isna(last_atr):
+    atr_col = next((col for col in df.columns if col.startswith('ATRr_')), None)
+    if not atr_col:
+        print("ERRORE: Nessuna colonna ATR trovata nel DataFrame.")
+        return None, None
+        
+    last_atr = df[atr_col].iloc[-1]
+    
+    if pd.isna(last_atr) or last_atr == 0:
         return None, None
 
     if "LONG" in signal:
-        # Per un LONG, lo Stop Loss va sotto un recente minimo (supporto)
         recent_lows = df['low'].tail(10).min()
         stop_loss = recent_lows - (last_atr * ATR_MULTIPLIER)
-        
         risk = entry_price - stop_loss
         take_profit = entry_price + (risk * RISK_REWARD_RATIO)
         
     elif "SHORT" in signal:
-        # Per uno SHORT, lo Stop Loss va sopra un recente massimo (resistenza)
         recent_highs = df['high'].tail(10).max()
         stop_loss = recent_highs + (last_atr * ATR_MULTIPLIER)
-        
         risk = stop_loss - entry_price
         take_profit = entry_price - (risk * RISK_REWARD_RATIO)
         
@@ -72,7 +78,6 @@ def calculate_sl_tp(df, signal, entry_price):
 def analyze_trend_following(df):
     """
     Analisi Trend Following con EMA.
-    Restituisce un segnale e un livello di confidenza.
     """
     if df.empty or len(df) < 50:
         return "NEUTRAL", 0, {}
@@ -102,23 +107,37 @@ def analyze_trend_following(df):
 
 def analyze_mean_reversion(df):
     """
-    Analisi Mean Reversion con RSI e Bande di Bollinger.
+    Analisi Mean Reversion con RSI e Bande di Bollinger. (Versione Robusta)
     """
     if df.empty or len(df) < 20:
         return "NEUTRAL", 0, {}
 
-    df.ta.bbands(length=20, append=True)
+    df.ta.bbands(length=20, std=2, append=True)
     df.ta.rsi(length=14, append=True)
 
-    last_close = df['close'].iloc[-1]
-    rsi = df['RSI_14'].iloc[-1]
-    bollinger_low = df['BBL_20_2.0'].iloc[-1]
-    bollinger_high = df['BBH_20_2.0'].iloc[-1]
+    # --- RICERCA DINAMICA DELLE COLONNE ---
+    rsi_col = next((col for col in df.columns if col.startswith('RSI_')), None)
+    bbl_col = next((col for col in df.columns if col.startswith('BBL_')), None)
+    bbu_col = next((col for col in df.columns if col.startswith('BBU_')), None)
 
-    if pd.isna(rsi) or pd.isna(bollinger_low):
+    if not all([rsi_col, bbl_col, bbu_col]):
+        print(f"ERRORE CRITICO: Impossibile trovare le colonne necessarie (RSI, BBL, BBU). Colonne presenti: {df.columns.tolist()}")
+        return "NEUTRAL", 0, {}
+
+    last_close = df['close'].iloc[-1]
+    rsi = df[rsi_col].iloc[-1]
+    bollinger_low = df[bbl_col].iloc[-1]
+    bollinger_high = df[bbu_col].iloc[-1]
+
+    if pd.isna(rsi) or pd.isna(bollinger_low) or pd.isna(bollinger_high):
         return "NEUTRAL", 0, {}
         
-    details = {'Prezzo': last_close, 'RSI': round(rsi, 2), 'Bollinger Low': round(bollinger_low, 2)}
+    details = {
+        'Prezzo': last_close, 
+        'RSI': round(rsi, 2), 
+        'Bollinger Low': round(bollinger_low, 2),
+        'Bollinger High': round(bollinger_high, 2)
+    }
     
     if last_close < bollinger_low and rsi < 30:
         return "STRONG LONG", 85, details
@@ -126,6 +145,7 @@ def analyze_mean_reversion(df):
         return "STRONG SHORT", 85, details
         
     return "NEUTRAL", 10, details
+
 
 # --- FUNZIONE PRINCIPALE DI SCANSIONE ---
 STRATEGY_MAP = {
@@ -148,7 +168,7 @@ def run_full_market_scan(data_client, assets, timeframe, strategy_name):
             
         signal, confidence, details = strategy_func(df)
         
-        if confidence > 80: # Solo per segnali forti
+        if confidence > 80:
             entry_price = df['close'].iloc[-1]
             stop_loss, take_profit = calculate_sl_tp(df, signal, entry_price)
 
@@ -158,7 +178,7 @@ def run_full_market_scan(data_client, assets, timeframe, strategy_name):
             signals.append({
                 'Asset': symbol,
                 'Segnale': signal,
-                'Prezzo': round(entry_price, 4),
+                'Prezzo': entry_price,
                 'Stop Loss': stop_loss,
                 'Take Profit': take_profit,
                 'Dettagli': str(details),

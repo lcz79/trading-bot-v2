@@ -1,47 +1,36 @@
 import yfinance as yf
 import pandas as pd
 
-def get_daily_data(symbol, period="1y", interval="1d"):
+def get_klines(symbol: str, interval: str, limit: int):
     """
-    Recupera dati storici da Yahoo Finance, accettando un intervallo.
+    Recupera dati storici da Yahoo Finance.
+    'limit' non è direttamente supportato, quindi usiamo un periodo calcolato.
     """
+    # yfinance usa un formato diverso per l'intervallo
+    # e preferisce periodi di tempo invece di 'limit'
+    period = "200d" # Un default ragionevole per ottenere abbastanza dati
+    if interval == "1h":
+        period = "730d" # Max per dati orari
+    
     try:
         ticker = yf.Ticker(symbol)
+        df = ticker.history(period=period, interval=interval.lower())
         
-        # Passa l'intervallo alla funzione history di yfinance
-        data = ticker.history(period=period, interval=interval)
-        
-        if data.empty:
-            print(f"WARN: Nessun dato restituito da Yahoo per {symbol} (period={period}, interval={interval})")
+        if df.empty:
             return None
-        
-        # Rinomina le colonne per essere coerenti con il resto del nostro sistema
-        data.rename(columns={
+            
+        # Rinominiamo le colonne per essere coerenti con Bybit
+        df.rename(columns={
             'Open': 'open',
             'High': 'high',
             'Low': 'low',
             'Close': 'close',
             'Volume': 'volume'
         }, inplace=True)
+        
+        # Selezioniamo solo le colonne che ci servono e restituiamo le ultime 'limit' righe
+        return df[['open', 'high', 'low', 'close', 'volume']].tail(limit)
 
-        # Rimuovi il timezone per evitare problemi di compatibilità
-        if data.index.tz is not None:
-            data.index = data.index.tz_convert(None)
-
-        return data
     except Exception as e:
-        print(f"ERRORE in yahoo_client per {symbol}: {e}")
+        print(f"ERRORE in yahoo_client.get_klines per {symbol}: {e}")
         return None
-
-if __name__ == '__main__':
-    # Test per verificare che la funzione funzioni con l'intervallo
-    print("--- Test del Client Yahoo Finance ---")
-    print("\nRichiesta dati giornalieri per AAPL:")
-    aapl_daily = get_daily_data("AAPL", period="1mo", interval="1d")
-    if aapl_daily is not None:
-        print(aapl_daily.head())
-
-    print("\nRichiesta dati orari per AAPL:")
-    aapl_hourly = get_daily_data("AAPL", period="1wk", interval="1h")
-    if aapl_hourly is not None:
-        print(aapl_hourly.head())
