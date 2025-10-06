@@ -1,107 +1,169 @@
 import pandas as pd
-import pandas_ta as ta
-from api_clients import bybit_client, yahoo_client, external_apis
+import pandas_ta as ta # Importiamo la nuova libreria
+from datetime import datetime, timedelta
 
-# ... (le funzioni di analisi come analyze_trend_following etc. sono complesse, le ometto per brevità ma le includo nel blocco completo sotto)
+# --- CONFIGURAZIONI STRATEGIA ---
+ATR_MULTIPLIER = 2.0  # Moltiplicatore per lo Stop Loss
+RISK_REWARD_RATIO = 1.5 # Rapporto Rischio/Rendimento per il Take Profit
 
-def get_fundamental_quality_score(asset, crypto_bulk_data):
-    symbol = asset['symbol']
-    source = asset['source']
-    try:
-        if source == 'Binance':
-            if not crypto_bulk_data or symbol not in crypto_bulk_data:
-                return 0, {'Errore': 'Dati metriche crypto non disponibili'}
-            metrics = crypto_bulk_data[symbol]
-            market_cap_rank = metrics.get('market_cap_rank')
-            volume_24h = metrics.get('total_volume', 0)
-            if symbol in ["BTCUSDT", "ETHUSDT"]:
-                return 100, {'Market Cap Rank': market_cap_rank, 'Progetto': 'Fondamentale (BTC/ETH)', 'Volume 24h': f"€{volume_24h:,.0f}"}
-            if not market_cap_rank or not volume_24h:
-                 return 0, {'Errore': 'Dati market cap o volume mancanti'}
-            score = 0
-            if market_cap_rank <= 10: score += 70
-            elif market_cap_rank <= 50: score += 20
-            if volume_24h > 1_000_000_000: score += 30
-            elif volume_24h > 500_000_000: score += 10
-            return min(score, 100), {'Market Cap Rank': market_cap_rank, 'Volume 24h': f"€{volume_24h:,.0f}"}
-        elif source == 'Yahoo':
-            if symbol in ['SPY', 'QQQ']:
-                 return 80, {'Info': 'ETF principale, punteggio di alta qualità assegnato.'}
-            return 75, {'Info': 'Azione USA. Punteggio di alta qualità di default.'}
-    except Exception as e:
-        return 0, {'Errore': str(e)}
+def get_fundamental_quality_score(asset_info, crypto_bulk_data):
+    symbol = asset_info['symbol']
+    source = asset_info['source']
+    
+    if source == 'Yahoo':
+        return 80, {"Info": "ETF principale, punteggio di alta qualità assegnato."}
+    
+    if symbol in ["BTCUSDT", "ETHUSDT"]:
+        return 100, {"Info": "Asset fondamentale, punteggio massimo."}
+
+    if symbol in crypto_bulk_data:
+        data = crypto_bulk_data[symbol]
+        market_cap = data.get('market_cap', 0)
+        volume_24h = data.get('total_volume', 0)
+        
+        score = 0
+        if market_cap > 1_000_000_000: score += 40
+        elif market_cap > 500_000_000: score += 20
+        
+        if volume_24h > 100_000_000: score += 40
+        elif volume_24h > 50_000_000: score += 20
+            
+        return score, {"Market Cap": f"${market_cap:,.0f}", "Volume 24h": f"${volume_24h:,.0f}"}
+
+    return 0, {"Errore": "Dati non disponibili."}
+
+
+def calculate_sl_tp(df, signal, entry_price):
+    """
+    Calcola Stop Loss e Take Profit basati su ATR e swing points.
+    """
+    if df.empty or len(df) < 20:
+        return None, None
+
+    # Calcola ATR
+    df.ta.atr(length=14, append=True)
+    last_atr = df['ATRr_14'].iloc[-1]
+    
+    if pd.isna(last_atr):
+        return None, None
+
+    if "LONG" in signal:
+        # Per un LONG, lo Stop Loss va sotto un recente minimo (supporto)
+        recent_lows = df['low'].tail(10).min()
+        stop_loss = recent_lows - (last_atr * ATR_MULTIPLIER)
+        
+        risk = entry_price - stop_loss
+        take_profit = entry_price + (risk * RISK_REWARD_RATIO)
+        
+    elif "SHORT" in signal:
+        # Per uno SHORT, lo Stop Loss va sopra un recente massimo (resistenza)
+        recent_highs = df['high'].tail(10).max()
+        stop_loss = recent_highs + (last_atr * ATR_MULTIPLIER)
+        
+        risk = stop_loss - entry_price
+        take_profit = entry_price - (risk * RISK_REWARD_RATIO)
+        
+    else:
+        return None, None
+
+    return round(stop_loss, 4), round(take_profit, 4)
+
 
 def analyze_trend_following(df):
-    if df.empty or len(df) < 50: return None, "Dati insufficienti"
+    """
+    Analisi Trend Following con EMA.
+    Restituisce un segnale e un livello di confidenza.
+    """
+    if df.empty or len(df) < 50:
+        return "NEUTRAL", 0, {}
+
     df.ta.ema(length=21, append=True)
     df.ta.ema(length=50, append=True)
-    df.ta.rsi(length=14, append=True)
-    df.ta.atr(length=14, append=True)
-    df.dropna(inplace=True)
-    if df.empty: return None, "Dati insufficienti dopo calcolo indicatori"
-    last_candle = df.iloc[-1]
-    if last_candle['EMA_21'] > last_candle['EMA_50'] and last_candle['close'] > last_candle['EMA_21'] and last_candle['RSI_14'] > 55:
-        signal = "STRONG LONG"
-        stop_loss = last_candle['close'] - (last_candle['ATRr_14'] * 2)
-        take_profit = last_candle['close'] + (last_candle['ATRr_14'] * 3)
-        details = {'Strategia': 'Trend Following', 'Razionale': 'Allineamento rialzista EMA, prezzo sopra media veloce, RSI forte.'}
-        return {"Segnale": signal, "Prezzo": f"{last_candle['close']:,.4f}", "Stop Loss": f"{stop_loss:,.4f}", "Take Profit": f"{take_profit:,.4f}", "Dettagli": str(details)}, None
-    return None, "Nessun segnale Trend Following"
+    
+    last_close = df['close'].iloc[-1]
+    ema21 = df['EMA_21'].iloc[-1]
+    ema50 = df['EMA_50'].iloc[-1]
+
+    if pd.isna(ema21) or pd.isna(ema50):
+        return "NEUTRAL", 0, {}
+
+    details = {'Prezzo': last_close, 'EMA21': round(ema21, 2), 'EMA50': round(ema50, 2)}
+    
+    if last_close > ema21 > ema50:
+        return "STRONG LONG", 90, details
+    if last_close < ema21 < ema50:
+        return "STRONG SHORT", 90, details
+    if last_close > ema21 and last_close > ema50:
+        return "LONG", 60, details
+    if last_close < ema21 and last_close < ema50:
+        return "SHORT", 60, details
+        
+    return "NEUTRAL", 10, details
 
 def analyze_mean_reversion(df):
-    if df.empty or len(df) < 20: return None, "Dati insufficienti"
-    df.ta.bbands(length=20, std=2, append=True)
-    required_cols = ['BBL_20_2.0', 'BBU_20_2.0', 'BBM_20_2.0']
-    if not all(col in df.columns for col in required_cols):
-        return None, "Errore nel calcolo delle Bande di Bollinger."
+    """
+    Analisi Mean Reversion con RSI e Bande di Bollinger.
+    """
+    if df.empty or len(df) < 20:
+        return "NEUTRAL", 0, {}
+
+    df.ta.bbands(length=20, append=True)
     df.ta.rsi(length=14, append=True)
-    df.ta.atr(length=14, append=True)
-    df.dropna(subset=required_cols + ['RSI_14', 'ATRr_14'], inplace=True)
-    if df.empty: return None, "Dati insufficienti dopo calcolo indicatori"
-    last_candle = df.iloc[-1]
-    if last_candle['close'] <= last_candle['BBL_20_2.0'] and last_candle['RSI_14'] < 35:
-        signal = "MEAN REVERSION LONG"
-        stop_loss = last_candle['close'] - (last_candle['ATRr_14'] * 2)
-        take_profit = last_candle['BBM_20_2.0']
-        details = {'Strategia': 'Mean Reversion', 'Razionale': f"Prezzo sotto banda inferiore Bollinger e RSI basso ({last_candle['RSI_14']:.2f}). Obiettivo: ritorno alla media."}
-        return {"Segnale": signal, "Prezzo": f"{last_candle['close']:,.4f}", "Stop Loss": f"{stop_loss:,.4f}", "Take Profit": f"{take_profit:,.4f}", "Dettagli": str(details)}, None
-    elif last_candle['close'] >= last_candle['BBU_20_2.0'] and last_candle['RSI_14'] > 65:
-        signal = "MEAN REVERSION SHORT"
-        stop_loss = last_candle['close'] + (last_candle['ATRr_14'] * 2)
-        take_profit = last_candle['BBM_20_2.0']
-        details = {'Strategia': 'Mean Reversion', 'Razionale': f"Prezzo sopra banda superiore Bollinger e RSI alto ({last_candle['RSI_14']:.2f}). Obiettivo: ritorno alla media."}
-        return {"Segnale": signal, "Prezzo": f"{last_candle['close']:,.4f}", "Stop Loss": f"{stop_loss:,.4f}", "Take Profit": f"{take_profit:,.4f}", "Dettagli": str(details)}, None
-    return None, "Nessun segnale Mean Reversion"
 
+    last_close = df['close'].iloc[-1]
+    rsi = df['RSI_14'].iloc[-1]
+    bollinger_low = df['BBL_20_2.0'].iloc[-1]
+    bollinger_high = df['BBH_20_2.0'].iloc[-1]
 
-def run_full_market_scan(assets, timeframe, strategy):
+    if pd.isna(rsi) or pd.isna(bollinger_low):
+        return "NEUTRAL", 0, {}
+        
+    details = {'Prezzo': last_close, 'RSI': round(rsi, 2), 'Bollinger Low': round(bollinger_low, 2)}
+    
+    if last_close < bollinger_low and rsi < 30:
+        return "STRONG LONG", 85, details
+    if last_close > bollinger_high and rsi > 70:
+        return "STRONG SHORT", 85, details
+        
+    return "NEUTRAL", 10, details
+
+# --- FUNZIONE PRINCIPALE DI SCANSIONE ---
+STRATEGY_MAP = {
+    "Trend Following": analyze_trend_following,
+    "Mean Reversion": analyze_mean_reversion
+}
+
+def run_full_market_scan(data_client, assets, timeframe, strategy_name):
     signals = []
+    strategy_func = STRATEGY_MAP.get(strategy_name)
+    if not strategy_func: return signals
+
     for asset in assets:
         symbol = asset['symbol']
         source = asset['source']
-        data = None
         
-        if source == 'Binance':
-            data = bybit_client.get_klines(symbol, timeframe, limit=100)
-            if data is None or data.empty:
-                print(f"-> INFO: Fallback su Binance API per i dati di {symbol}")
-                data = external_apis.get_binance_klines(symbol, timeframe, limit=100)
-
-        elif source == 'Yahoo':
-            period = "1y"
-            interval = "1d"
-            if timeframe == "1h": period, interval = "1mo", "60m"
-            data = yahoo_client.get_daily_data(symbol, period=period, interval=interval)
-
-        if data is None or data.empty:
+        df = data_client.get_data(symbol, timeframe, limit=200, source=source)
+        if df is None or df.empty:
             continue
-        
-        result, error = None, "Strategia non trovata"
-        if strategy == "Trend Following": result, error = analyze_trend_following(data)
-        elif strategy == "Mean Reversion": result, error = analyze_mean_reversion(data)
             
-        if result:
-            result['Asset'] = symbol
-            signals.append(result)
+        signal, confidence, details = strategy_func(df)
+        
+        if confidence > 80: # Solo per segnali forti
+            entry_price = df['close'].iloc[-1]
+            stop_loss, take_profit = calculate_sl_tp(df, signal, entry_price)
+
+            details['Stop Loss'] = stop_loss
+            details['Take Profit'] = take_profit
+            
+            signals.append({
+                'Asset': symbol,
+                'Segnale': signal,
+                'Prezzo': round(entry_price, 4),
+                'Stop Loss': stop_loss,
+                'Take Profit': take_profit,
+                'Dettagli': str(details),
+                'Strategia': strategy_name,
+                'Timeframe': timeframe
+            })
             
     return signals
