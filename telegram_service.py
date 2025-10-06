@@ -15,42 +15,29 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 sent_signals_cache = set()
 
 def escape_markdown_v2(text: str) -> str:
-    """
-    Prepara il testo per la modalità MarkdownV2 di Telegram,
-    eseguendo l'escape dei caratteri speciali.
-    """
-    # Lista di caratteri che Telegram richiede di 'escapare'
+    """Prepara il testo per la modalità MarkdownV2 di Telegram."""
     escape_chars = r'_*[]()~`>#+-=|{}.!'
-    # Applica l'escape aggiungendo un '\' prima di ogni carattere speciale
     return "".join(f'\\{char}' if char in escape_chars else char for char in str(text))
 
 def send_telegram_message(message):
-    """
-    Invia un messaggio formattato in MarkdownV2 a Telegram.
-    """
+    """Invia un messaggio formattato in MarkdownV2 a Telegram."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("ERRORE: Credenziali Telegram non trovate in .env")
         return
 
     api_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        'chat_id': TELEGRAM_CHAT_ID,
-        'text': message,
-        'parse_mode': 'MarkdownV2' # Riattiviamo la formattazione!
-    }
+    payload = {'chat_id': TELEGRAM_CHAT_ID, 'text': message, 'parse_mode': 'MarkdownV2'}
     try:
         response = requests.post(api_url, json=payload, timeout=10)
         if response.status_code != 200:
             print(f"ERRORE: Impossibile inviare il messaggio. Status: {response.status_code}, Risposta: {response.text}")
             return
-        print(f"-> Messaggio formattato inviato a Telegram: {message.splitlines()[0]}")
+        print(f"-> Messaggio formattato con emoji inviato a Telegram: {message.splitlines()[0]}")
     except requests.exceptions.RequestException as e:
         print(f"ERRORE di rete nell'invio a Telegram: {e}")
 
 def check_and_send_signals():
-    """
-    Controlla il database per nuovi segnali e li invia in formato professionale.
-    """
+    """Controlla il database per nuovi segnali e li invia con segnali visivi."""
     global sent_signals_cache
     session = database.get_db_session()
     try:
@@ -62,18 +49,29 @@ def check_and_send_signals():
             current_signal_ids.add(signal_id)
             
             if signal_id not in sent_signals_cache:
-                # Applica l'escape a ogni variabile prima di costruire il messaggio
+                # --- NUOVA LOGICA PER GLI EMOJI ---
+                signal_text = row['signal']
+                if 'LONG' in signal_text.upper():
+                    signal_emoji = "🟢"
+                    signal_title = "Nuovo Segnale LONG"
+                elif 'SHORT' in signal_text.upper():
+                    signal_emoji = "🔴"
+                    signal_title = "Nuovo Segnale SHORT"
+                else:
+                    signal_emoji = "⚪️"
+                    signal_title = "Nuovo Segnale NEUTRO"
+                # --- FINE NUOVA LOGICA ---
+
                 asset = escape_markdown_v2(row['asset'])
                 timeframe = escape_markdown_v2(row['timeframe'])
-                signal = escape_markdown_v2(row['signal'])
+                signal = escape_markdown_v2(signal_text)
                 price = escape_markdown_v2(row['price'])
                 stop_loss = escape_markdown_v2(row['stop_loss'])
                 take_profit = escape_markdown_v2(row['take_profit'])
                 strategy = escape_markdown_v2(row['strategy'])
                 
-                # Messaggio ben formattato con MarkdownV2
                 message = (
-                    f"🚨 *Nuovo Segnale Trovato* 🚨\n\n"
+                    f"{signal_emoji} *{escape_markdown_v2(signal_title)}* {signal_emoji}\n\n"
                     f"*Asset:* `{asset}`\n"
                     f"*Timeframe:* {timeframe}\n"
                     f"*Segnale:* *{signal}*\n\n"
@@ -94,12 +92,12 @@ if __name__ == "__main__":
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("ERRORE FATALE: Le credenziali di Telegram non sono impostate. Il servizio non può partire.")
     else:
-        print("--- Avvio Servizio Notifiche Telegram (v1.2 - Formattazione Robusta) ---")
+        print("--- Avvio Servizio Notifiche Telegram (v1.3 - Con Segnali Visivi) ---")
         print("Controllo nuovi segnali ogni minuto...")
         
-        # Resettiamo la cache per inviare di nuovo i segnali nel nuovo formato
+        # Resettiamo la cache per inviare i segnali con il nuovo formato emoji
         sent_signals_cache.clear()
-        print("Cache dei segnali inviati resettata per un nuovo invio formattato.")
+        print("Cache dei segnali inviati resettata per un nuovo invio con emoji.")
         
         check_and_send_signals()
         
