@@ -1,0 +1,11 @@
+streamlit
+pandas
+numpy
+requests
+ta
+plotly
+pandas-ta
+yfinance
+finnhub-python
+pybit
+schedule
