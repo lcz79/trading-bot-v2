@@ -1,37 +1,65 @@
 # ==============================================================================
-# CONFIGURAZIONE CENTRALE DEL PROGETTO PHOENIX (v1.1)
+# CONFIGURAZIONE DEGLI ASSET DA ANALIZZARE
 # ==============================================================================
+# Ogni dizionario rappresenta un asset da monitorare.
+# 'symbol': Il ticker usato dall'exchange (es. 'BTCUSDT').
+# 'source': Il client da usare per i dati ('Bybit-linear', 'Bybit-inverse', 'YahooFinance').
+# 'type': La categoria dell'asset ('crypto', 'stock', 'etf').
 
-# --- 1. ASSET DA ANALIZZARE ---
 ASSETS_TO_ANALYZE = [
-    # Criptovalute (derivati lineari da Bybit)
-    {'symbol': 'BTCUSDT', 'source': 'Bybit-linear', 'type': 'crypto'},
-    {'symbol': 'ETHUSDT', 'source': 'Bybit-linear', 'type': 'crypto'},
-    {'symbol': 'SOLUSDT', 'source': 'Bybit-linear', 'type': 'crypto'},
+    # --- COMBINAZIONI VALIDATE E PROFITTEVOLI ---
+    {
+        "symbol": "BTCUSDT", 
+        "source": "Bybit-linear", 
+        "type": "crypto",
+        "comment": "Strategia 'Mean Reversion Pro' validata con backtest. Profit Factor: 2.00"
+    },
     
-    # Azioni/ETF (da Yahoo Finance)
-    {'symbol': 'SPY', 'source': 'Yahoo', 'type': 'stock'},
-    {'symbol': 'QQQ', 'source': 'Yahoo', 'type': 'stock'},
-    {'symbol': 'AAPL', 'source': 'Yahoo', 'type': 'stock'},
+    # --- COMBINAZIONI SPERIMENTALI O NON ANCORA VALIDATE ---
+    {
+        "symbol": "ETHUSDT", 
+        "source": "Bybit-linear", 
+        "type": "crypto",
+        "comment": "Backtest ha mostrato una perdita con la strategia attuale. Da monitorare o ri-ottimizzare."
+    },
+    {
+        "symbol": "SOLUSDT", 
+        "source": "Bybit-linear", 
+        "type": "crypto",
+        "comment": "Non ancora testato."
+    },
+    
+    # --- ESEMPI DI ASSET TRADIZIONALI (azioni/ETF) ---
+    # {
+    #     "symbol": "SPY", 
+    #     "source": "YahooFinance", 
+    #     "type": "etf",
+    #     "comment": "Esempio ETF S&P 500. Richiede una strategia diversa (es. trend-following)."
+    # },
+    # {
+    #     "symbol": "AAPL", 
+    #     "source": "YahooFinance", 
+    #     "type": "stock",
+    #     "comment": "Esempio azione Apple."
+    # },
 ]
 
-# --- 2. STRATEGIE DA APPLICARE ---
-STRATEGIES = [
-    "Trend Following",
-    "Mean Reversion",
-]
-
-# --- 3. TIMEFRAME DA ANALIZZARE ---
-# Dizionario di timeframe specifici per tipo di asset
-# per gestire le differenze tra le API (es. Bybit vs Yahoo)
+# ==============================================================================
+# CONFIGURAZIONE DEI TIMEFRAME PER TIPO DI ASSET
+# ==============================================================================
+# Qui specifichiamo quali timeframe analizzare per ogni 'type' di asset.
+# Questo permette di usare timeframe più lunghi per le azioni e più corti per le crypto.
 #
+# Formati timeframe:
+# - Per Bybit: '1', '3', '5', '15', '30', '60', '120', '240', '360', '720', 'D', 'W', 'M'
+# - Per Yahoo Finance: '1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h', '1d', '5d', '1wk', '1mo', '3mo'
+
 TIMEFRAMES_CONFIG = {
-    'crypto': [
-        "60",  # 60 minuti (1 ora)
-        "240", # 240 minuti (4 ore)
+    "crypto": [
+        "240",  # Timeframe 4 ore (validato per BTCUSDT)
+        "60",   # Timeframe 1 ora (sperimentale)
+        "D"     # Timeframe giornaliero
     ],
-    'stock': [
-        "1h",  # 1 ora (formato Yahoo)
-        "1d",  # 1 giorno (formato Yahoo)
-    ]
+    "stock": ["D"], # Per le azioni, analizziamo solo il giornaliero
+    "etf": ["D"],   # Anche per gli ETF, solo il giornaliero
 }

@@ -70,6 +70,9 @@ class TechnicalSignal(Base, TimestampMixin):
     exchange = Column(String, nullable=True)
     params = Column(JSON, nullable=True)
     details = Column(JSON, nullable=True)
+    
+    # --- NUOVA COLONNA PER LE NOTIFICHE ---
+    notified_at = Column(DateTime(timezone=True), nullable=True, index=True)
 
 Index("ix_signal_asset_tf_time", TechnicalSignal.asset, TechnicalSignal.timeframe, TechnicalSignal.updated_at.desc())
 
