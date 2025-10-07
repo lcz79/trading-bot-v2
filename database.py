@@ -3,9 +3,8 @@ from decimal import Decimal
 from contextlib import contextmanager
 from sqlalchemy import (
     create_engine, Column, Integer, String, DateTime, Numeric,
-    Index, UniqueConstraint, text
+    Index, UniqueConstraint, text, JSON
 )
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import sessionmaker, declarative_base
 from datetime import datetime, timedelta, timezone
 
@@ -41,8 +40,7 @@ class TimestampMixin:
     )
     updated_at = Column(
         DateTime(timezone=True),
-        server_default=text("timezone('utc', now())"),
-        onupdate=text("timezone('utc', now())"), # onupdate non è standard SQLAlchemy core, server_onupdate è il parametro corretto
+        server_default=text("timezone('utc', now())"),  # Nota: onupdate non è standard, ma ok per ora
         nullable=False,
     )
 
@@ -55,7 +53,7 @@ class QualityScore(Base, TimestampMixin):
     id = Column(Integer, primary_key=True)
     asset = Column(String, index=True, unique=True, nullable=False)
     quality_score = Column(Integer, nullable=False)
-    details = Column(JSONB, nullable=True)
+    details = Column(JSON, nullable=True)
 
 class TechnicalSignal(Base, TimestampMixin):
     __tablename__ = "technical_signals"
@@ -70,8 +68,8 @@ class TechnicalSignal(Base, TimestampMixin):
     take_profit = Column(Numeric(38, 18))
     market_category = Column(String, nullable=True)
     exchange = Column(String, nullable=True)
-    params = Column(JSONB, nullable=True)
-    details = Column(JSONB, nullable=True)
+    params = Column(JSON, nullable=True)
+    details = Column(JSON, nullable=True)
 
 Index("ix_signal_asset_tf_time", TechnicalSignal.asset, TechnicalSignal.timeframe, TechnicalSignal.updated_at.desc())
 

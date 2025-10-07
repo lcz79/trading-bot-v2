@@ -56,20 +56,20 @@ def calculate_sl_tp(df, signal, entry_price):
     if not atr_col or pd.isna(df[atr_col].iloc[-1]) or df[atr_col].iloc[-1] == 0:
         return None, None
         
-    last_atr = df[atr_col].iloc[-1]
+    last_atr = float(df[atr_col].iloc[-1])  # Converti a float
     
     if "LONG" in signal:
-        stop_loss = df['low'].tail(10).min() - (last_atr * 0.5) # Meno aggressivo
+        stop_loss = df['low'].tail(10).min() - (last_atr * ATR_MULTIPLIER)
         risk = entry_price - stop_loss
         take_profit = entry_price + (risk * RISK_REWARD_RATIO)
     elif "SHORT" in signal:
-        stop_loss = df['high'].tail(10).max() + (last_atr * 0.5)
+        stop_loss = df['high'].tail(10).max() + (last_atr * ATR_MULTIPLIER)
         risk = stop_loss - entry_price
         take_profit = entry_price - (risk * RISK_REWARD_RATIO)
     else:
         return None, None
 
-    return round(stop_loss, 4), round(take_profit, 4)
+    return float(stop_loss), float(take_profit)  # Converti a float
 
 
 def analyze_trend_following(df):
@@ -82,14 +82,14 @@ def analyze_trend_following(df):
     df.ta.ema(length=21, append=True)
     df.ta.ema(length=50, append=True)
     
-    last_close = df['close'].iloc[-1]
-    ema21 = df['EMA_21'].iloc[-1]
-    ema50 = df['EMA_50'].iloc[-1]
+    last_close = float(df['close'].iloc[-1])  # Converti
+    ema21 = float(df['EMA_21'].iloc[-1])
+    ema50 = float(df['EMA_50'].iloc[-1])
 
     if pd.isna(ema21) or pd.isna(ema50):
         return "NEUTRAL", 0, {}
 
-    details = {'Prezzo': last_close, 'EMA21': round(ema21, 2), 'EMA50': round(ema50, 2)}
+    details = {'Prezzo': last_close, 'EMA21': ema21, 'EMA50': ema50}
     
     if last_close > ema21 > ema50:
         return "STRONG LONG", 90, details
@@ -119,15 +119,15 @@ def analyze_mean_reversion(df):
     if not all([rsi_col, bbl_col, bbu_col]):
         return "NEUTRAL", 0, {}
 
-    last_close = df['close'].iloc[-1]
-    rsi = df[rsi_col].iloc[-1]
-    bollinger_low = df[bbl_col].iloc[-1]
-    bollinger_high = df[bbu_col].iloc[-1]
+    last_close = float(df['close'].iloc[-1])
+    rsi = float(df[rsi_col].iloc[-1])
+    bollinger_low = float(df[bbl_col].iloc[-1])
+    bollinger_high = float(df[bbu_col].iloc[-1])
 
     if pd.isna(rsi) or pd.isna(bollinger_low) or pd.isna(bollinger_high):
         return "NEUTRAL", 0, {}
         
-    details = {'Prezzo': last_close, 'RSI': round(rsi, 2), 'Bollinger Low': round(bollinger_low, 2), 'Bollinger High': round(bollinger_high, 2)}
+    details = {'Prezzo': last_close, 'RSI': rsi, 'Bollinger Low': bollinger_low, 'Bollinger High': bollinger_high}
     
     if last_close < bollinger_low and rsi < 30:
         return "STRONG LONG", 85, details
@@ -165,7 +165,7 @@ def run_single_scan(data_client, asset, timeframe, strategy_name):
     signal, confidence, details = strategy_func(df)
     
     if confidence > 80:
-        entry_price = df['close'].iloc[-1]
+        entry_price = float(df['close'].iloc[-1])  # Converti a float
         stop_loss, take_profit = calculate_sl_tp(df, signal, entry_price)
 
         details['Stop Loss'] = stop_loss
