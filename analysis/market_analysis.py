@@ -1,116 +1,129 @@
 import pandas as pd
 import pandas_ta as ta
 
-# --- CONFIGURAZIONI STRATEGIA ---
+# --- Costanti di Strategia ---
 ATR_MULTIPLIER = 2.0
-RISK_REWARD_RATIO = 1.5 
-RSI_OVERBOUGHT = 70 # Usiamo valori più standard
+RISK_REWARD_RATIO = 1.5
+RSI_OVERBOUGHT = 70
 RSI_OVERSOLD = 30
+HTF_TREND_PERIOD = 200  # EMA su timeframe più alto (Daily)
+ATR_FILTER_PERIOD = 50
+ATR_MIN_MULTIPLIER = 0.8
+ATR_MAX_MULTIPLIER = 2.5
 
-# ==============================================================================
-# FUNZIONI DI SERVIZIO E ANALISI
-# ==============================================================================
+
+# --- Funzioni di Analisi ---
 
 def get_fundamental_quality_score(asset_info, crypto_bulk_data):
-    """Calcola un punteggio di qualità per un asset."""
+    """Calcola un punteggio di qualità basato su capitalizzazione di mercato e volume."""
     symbol = asset_info['symbol']
-    asset_type = asset_info.get('type', '')
     
-    # Asset di alto livello hanno punteggio massimo di default
-    if symbol in ["BTCUSDT", "ETHUSDT"]: 
+    if symbol.startswith('1000'):
+        base_symbol = symbol[4:]
+    else:
+        base_symbol = symbol
+
+    if base_symbol in ["BTCUSDT", "ETHUSDT"]:
         return 100, {"Info": "Asset fondamentale"}
-    if asset_type == 'stock': 
-        return 80, {"Info": "ETF/Azione principale"}
-        
-    # Per le altre crypto, usa i dati di CoinGecko
-    if symbol in crypto_bulk_data:
-        data = crypto_bulk_data.get(symbol)
+    
+    if base_symbol in crypto_bulk_data:
+        data = crypto_bulk_data.get(base_symbol)
         if data:
             market_cap = data.get('market_cap', 0) or 0
             volume_24h = data.get('total_volume', 0) or 0
             score = 0
             if market_cap > 1_000_000_000: score += 40
             elif market_cap > 500_000_000: score += 20
-            
             if volume_24h > 100_000_000: score += 40
             elif volume_24h > 50_000_000: score += 20
-            
             return score, {"Market Cap": f"${market_cap:,.0f}", "Volume 24h": f"${volume_24h:,.0f}"}
             
-    return 0, {"Errore": f"Dati non disponibili per {symbol}."}
+    return 0, {"Errore": f"Dati fondamentali non disponibili per {symbol}."}
 
-def calculate_sl_tp(df, signal, entry_price):
-    if df.empty or len(df) < 20: return None, None
-    df.ta.atr(length=14, append=True)
-    atr_col = next((col for col in df.columns if col.startswith('ATRr_')), None)
-    if not atr_col or pd.isna(df[atr_col].iloc[-1]) or df[atr_col].iloc[-1] == 0: return None, None
-    last_atr = float(df[atr_col].iloc[-1])
-    if "LONG" in signal:
-        stop_loss = entry_price - (last_atr * ATR_MULTIPLIER)
-        risk = entry_price - stop_loss
-        take_profit = entry_price + (risk * RISK_REWARD_RATIO)
-    elif "SHORT" in signal:
-        stop_loss = entry_price + (last_atr * ATR_MULTIPLIER)
-        risk = stop_loss - entry_price
-        take_profit = entry_price - (risk * RISK_REWARD_RATIO)
-    else: return None, None
-    return float(stop_loss), float(take_profit)
 
-def analyze_mean_reversion_pro(df):
-    """
-    Strategia Mean Reversion classica: entra quando il prezzo chiude FUORI dalle bande.
-    """
-    if df.empty or len(df) < 21: return "NEUTRAL", 0, {}
+def calculate_sl_tp(entry_price, atr, direction):
+    """Calcola Stop Loss e Take Profit basati sull'ATR."""
+    if direction == 'Long':
+        stop_loss = entry_price - (atr * ATR_MULTIPLIER)
+        take_profit = entry_price + (atr * ATR_MULTIPLIER * RISK_REWARD_RATIO)
+    elif direction == 'Short':
+        stop_loss = entry_price + (atr * ATR_MULTIPLIER)
+        take_profit = entry_price - (atr * ATR_MULTIPLIER * RISK_REWARD_RATIO)
+    else:
+        return None, None
+    return stop_loss, take_profit
+
+
+def get_higher_timeframe_trend(data_client, symbol, source, timeframe='D', period=HTF_TREND_PERIOD):
+    """Determina il trend di fondo usando un timeframe più alto (default: Daily)."""
+    df = data_client.get_data(symbol, timeframe, limit=period + 50, source=source)
+    if df is None or df.empty:
+        return 'NEUTRAL', {}
     
-    df.ta.bbands(length=20, std=2, append=True)
-    df.ta.rsi(length=14, append=True)
-
-    rsi_col = next((c for c in df.columns if c.startswith('RSI_')), None)
-    bbl_col = next((c for c in df.columns if c.startswith('BBL_')), None)
-    bbu_col = next((c for c in df.columns if c.startswith('BBU_')), None)
-
-    if not all([rsi_col, bbl_col, bbu_col]): return "NEUTRAL", 0, {}
-
-    last_close = float(df['close'].iloc[-1])
-    rsi = float(df[rsi_col].iloc[-1])
-    bollinger_low = float(df[bbl_col].iloc[-1])
-    bollinger_high = float(df[bbu_col].iloc[-1])
-
-    if any(pd.isna([last_close, rsi, bollinger_low, bollinger_high])):
-        return "NEUTRAL", 0, {}
-        
-    details = {'RSI': rsi, 'BBL': bollinger_low, 'BBU': bollinger_high}
+    df[f'EMA_{period}'] = ta.ema(df['close'], length=period)
     
-    # CONDIZIONE LONG SEMPLIFICATA: Prezzo chiude SOTTO la banda e RSI è ipervenduto
-    if last_close < bollinger_low and rsi < RSI_OVERSOLD:
-        return "STRONG LONG", 90, details
+    last_close = df['close'].iloc[-1]
+    last_ema = df[f'EMA_{period}'].iloc[-1]
+    
+    if last_close > last_ema:
+        trend = 'UPTREND'
+    elif last_close < last_ema:
+        trend = 'DOWNTREND'
+    else:
+        trend = 'NEUTRAL'
         
-    # CONDIZIONE SHORT SEMPLIFICATA: Prezzo chiude SOPRA la banda e RSI è ipercomprato
-    if last_close > bollinger_high and rsi > RSI_OVERBOUGHT:
-        return "STRONG SHORT", 90, details
-        
-    return "NEUTRAL", 10, details
+    return trend, {'last_close': last_close, f'ema_{period}': last_ema}
 
-def run_single_scan(data_client, asset, timeframe):
-    """
-    Esegue l'analisi di Mean Reversion Pro.
-    """
+
+def run_single_scan(data_client, asset, timeframe, htf_trend, htf_details):
+    """Esegue l'analisi completa per un singolo asset e timeframe."""
+    df = data_client.get_data(asset['symbol'], timeframe, limit=200, source=asset['source'])
+    if df is None or df.empty or len(df) < 50:
+        return []
+
+    # Calcolo indicatori
+    df['EMA_20'] = ta.ema(df['close'], length=20)
+    df['EMA_50'] = ta.ema(df['close'], length=50)
+    df['RSI'] = ta.rsi(df['close'], length=14)
+    df['ATR'] = ta.atr(df['high'], df['low'], df['close'], length=14)
+
+    last_row = df.iloc[-1]
     signals = []
-    symbol, source = asset['symbol'], asset['source']
-    df = data_client.get_data(symbol, timeframe, limit=200, source=source)
-    if df is None or df.empty: return signals
-    
-    # La funzione di analisi ora è quella corretta
-    signal, confidence, details = analyze_mean_reversion_pro(df)
-    
-    if signal != "NEUTRAL":
-        entry_price = float(df['close'].iloc[-1])
-        stop_loss, take_profit = calculate_sl_tp(df, signal, entry_price)
-        
-        details.update({'Stop Loss': stop_loss, 'Take Profit': take_profit})
+
+    # Strategia 1: Trend Following
+    is_bullish_cross = last_row['EMA_20'] > last_row['EMA_50'] and df['EMA_20'].iloc[-2] <= df['EMA_50'].iloc[-2]
+    is_bearish_cross = last_row['EMA_20'] < last_row['EMA_50'] and df['EMA_20'].iloc[-2] >= df['EMA_50'].iloc[-2]
+
+    if htf_trend == 'UPTREND' and is_bullish_cross:
+        sl, tp = calculate_sl_tp(last_row['close'], last_row['ATR'], 'Long')
         signals.append({
-            'Asset': symbol, 'Segnale': signal, 'Prezzo': entry_price, 
-            'Stop Loss': stop_loss, 'Take Profit': take_profit, 
-            'Dettagli': str(details), 'Strategia': "Mean Reversion Pro", 'Timeframe': timeframe
+            'Asset': asset['symbol'], 'Timeframe': timeframe, 'Strategia': 'Trend Following',
+            'Segnale': 'Buy Long', 'Prezzo': last_row['close'], 'Stop Loss': sl, 'Take Profit': tp
         })
+
+    if htf_trend == 'DOWNTREND' and is_bearish_cross:
+        sl, tp = calculate_sl_tp(last_row['close'], last_row['ATR'], 'Short')
+        signals.append({
+            'Asset': asset['symbol'], 'Timeframe': timeframe, 'Strategia': 'Trend Following',
+            'Segnale': 'Sell Short', 'Prezzo': last_row['close'], 'Stop Loss': sl, 'Take Profit': tp
+        })
+
+    # Strategia 2: Mean Reversion
+    is_oversold = last_row['RSI'] < RSI_OVERSOLD
+    is_overbought = last_row['RSI'] > RSI_OVERBOUGHT
+
+    if htf_trend == 'UPTREND' and is_oversold:
+        sl, tp = calculate_sl_tp(last_row['close'], last_row['ATR'], 'Long')
+        signals.append({
+            'Asset': asset['symbol'], 'Timeframe': timeframe, 'Strategia': 'Mean Reversion',
+            'Segnale': 'Buy Long', 'Prezzo': last_row['close'], 'Stop Loss': sl, 'Take Profit': tp
+        })
+
+    if htf_trend == 'DOWNTREND' and is_overbought:
+        sl, tp = calculate_sl_tp(last_row['close'], last_row['ATR'], 'Short')
+        signals.append({
+            'Asset': asset['symbol'], 'Timeframe': timeframe, 'Strategia': 'Mean Reversion',
+            'Segnale': 'Sell Short', 'Prezzo': last_row['close'], 'Stop Loss': sl, 'Take Profit': tp
+        })
+        
     return signals
