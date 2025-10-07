@@ -19,20 +19,33 @@ def sync_account_balance():
         print("Errore nel recupero del saldo.")
 
 def sync_open_positions():
+    """
+    Sincronizza le posizioni aperte, gestendo correttamente il caso in cui non ci siano posizioni.
+    """
     positions = bybit_client.get_open_positions()
-    if positions:
+
+    # Controlla se la chiamata API ha avuto successo (non è None)
+    if positions is not None:
         with session_scope() as session:
+            # Cancella sempre le posizioni vecchie per riflettere lo stato attuale
             session.query(OpenPosition).delete()
-            for pos in positions:
-                position = OpenPosition(
-                    exchange='Bybit',
-                    symbol=pos['symbol'],
-                    position_side=pos['side'],
-                    size=float(pos['size']),
-                    entry_price=float(pos['avgPrice']),
-                    pnl=float(pos.get('unrealizedPnl', 0))
-                )
-                session.add(position)
-        print(f"Posizioni sincronizzate: {len(positions)} aperte.")
+
+            # Se la lista non è vuota, aggiungi le nuove posizioni
+            if positions:
+                for pos in positions:
+                    position = OpenPosition(
+                        exchange='Bybit',
+                        symbol=pos['symbol'],
+                        position_side=pos['side'],
+                        size=float(pos['size']),
+                        entry_price=float(pos['avgPrice']),
+                        pnl=float(pos.get('unrealizedPnl', 0))
+                    )
+                    session.add(position)
+                print(f"Posizioni sincronizzate: {len(positions)} aperte.")
+            else:
+                # Se la lista è vuota, significa che non ci sono posizioni aperte
+                print("Posizioni sincronizzate: 0 aperte.")
     else:
-        print("Errore nel recupero delle posizioni.")
+        # Questo blocco viene eseguito solo se la chiamata API è fallita (ha restituito None)
+        print("Errore nel recupero delle posizioni (la chiamata API è fallita).")

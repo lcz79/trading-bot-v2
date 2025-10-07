@@ -42,8 +42,15 @@ def _send_private_request(endpoint, params=None):
 def get_wallet_balance(account_type="UNIFIED"):
     return _send_private_request("/v5/account/wallet-balance", {"accountType": account_type})
 
-def get_open_positions(category="linear"):
-    result = _send_private_request("/v5/position/list", {"category": category})
+def get_open_positions(category="linear", settle_coin="USDT"):
+    """
+    Recupera le posizioni aperte. Aggiunto 'settle_coin' per compatibilità con API v5.
+    """
+    params = {
+        "category": category,
+        "settleCoin": settle_coin
+    }
+    result = _send_private_request("/v5/position/list", params)
     return result.get('list', []) if result else []
 
 # --- FUNZIONE GET_KLINES MODIFICATA ---
