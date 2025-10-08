@@ -1,38 +1,33 @@
-# api_clients/data_client.py - v3.0.0 (Robust & Clean)
-# ----------------------------------------------------------------
-# - Risolve il FutureWarning convertendo correttamente i tipi di dato.
-# - Migliora il logging degli errori.
-# ----------------------------------------------------------------
-
+# api_clients/data_client.py - (Phoenix Patch v7.0 Applied)
 import pandas as pd
-import logging
-from .bybit_client import BybitClient
+import requests
 
 class FinancialDataClient:
-    def get_klines(self, symbol: str, interval: str, source: str, limit: int = 200) -> pd.DataFrame | None:
-        if source != 'bybit':
-            logging.warning(f"Sorgente dati '{source}' non supportata.")
-            return None
+    def get_klines(self, symbol, interval, source='bybit', limit=500):
+        if source.lower() == 'bybit':
+            return self._get_bybit_klines(symbol, interval, limit)
+        return None
+
+    def _get_bybit_klines(self, symbol, interval, limit):
+        # PATCH 4: Mapping dei timeframe
+        TIMEFRAME_MAP = {"1d": "D", "4h": "240", "15m": "15"}
+        bybit_interval = TIMEFRAME_MAP.get(str(interval).lower(), interval)
+        
+        url = "https://api.bybit.com/v5/market/kline"
+        params = {'category': 'spot', 'symbol': symbol, 'interval': bybit_interval, 'limit': limit}
         try:
-            client = BybitClient()
-            response = client.session.get_kline(category="linear", symbol=symbol, interval=interval, limit=limit)
-            if not response or response.get('retCode') != 0:
-                msg = response.get('retMsg', 'Errore sconosciuto') if response else "Nessuna risposta dall'API"
-                logging.error(f"Errore API Bybit per {symbol} ({interval}): {msg}")
-                return None
-            
-            klines = response['result']['list']
-            if not klines: return None
-            
-            df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'turnover'])
-            df['timestamp'] = pd.to_numeric(df['timestamp'])
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            df.set_index('timestamp', inplace=True)
-            
-            for col in ['open', 'high', 'low', 'close', 'volume']:
-                df[col] = pd.to_numeric(df[col])
-            
-            return df.iloc[::-1][['open', 'high', 'low', 'close', 'volume']]
-        except Exception as e:
-            logging.error(f"ERRORE CRITICO in DataClient ({symbol}, {interval}): {e}", exc_info=False)
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            if data['retCode'] == 0 and data['result']['list']:
+                df = pd.DataFrame(data['result']['list'], columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'turnover'])
+                df['timestamp'] = pd.to_datetime(df['timestamp'].astype(float), unit='ms')
+                df.set_index('timestamp', inplace=True)
+                for col in ['open', 'high', 'low', 'close', 'volume']:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+                df.dropna(inplace=True)
+                return df.iloc[::-1]
+            return pd.DataFrame()
+        except requests.exceptions.RequestException as e:
+            print(f"Errore API Bybit: {e}")
             return None

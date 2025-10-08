@@ -1,118 +1,134 @@
-# app.py — Phoenix Dashboard v4.2.0 (Streamlit Native)
-# ----------------------------------------------------------------
-# - Rimosso il ciclo 'while True' per risolvere StreamlitDuplicateElementKey.
-# - Integrata la libreria streamlit-autorefresh per aggiornamenti puliti.
-# - Struttura del codice allineata alle best practice di Streamlit.
-# ----------------------------------------------------------------
-
-from dotenv import load_dotenv
-load_dotenv()
+# app.py — Phoenix Command Center v6.0 (Fusion FINAL)
+# Integra la Telemetria Live (v5.0) con la Visualizzazione Dettagliata dei Segnali (v4.0).
 
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
 import pandas as pd
 import database
 from sqlalchemy import desc
-import time
 import datetime
-from api_clients.bybit_client import BybitClient
+import ast
 
-# --- Configurazione Pagina (eseguita una sola volta) ---
-st.set_page_config(page_title="Phoenix Dashboard", page_icon="🔥", layout="wide")
+# Importiamo il client Bybit
+try:
+    from api_clients.bybit_client import BybitClient
+except ImportError:
+    BybitClient = None
+
+st.set_page_config(page_title="Phoenix Command Center", page_icon="🔥", layout="wide")
 database.init_db()
 
-# --- Funzioni di Utilità ---
+# Funzione per caricare i dati dal DB locale
 @st.cache_data(ttl=30)
-def load_data():
-    """Carica tutti i dati necessari dal database e dall'exchange."""
-    print(f"[{time.ctime()}] Eseguo load_data...")
-    total_equity = "N/A"
-    
-    try:
-        client = BybitClient()
-        balance_data = client.session.get_wallet_balance(accountType="UNIFIED")
-        if balance_data and balance_data['retCode'] == 0:
-            total_equity = float(balance_data['result']['list'][0]['totalEquity'])
-    except Exception as e:
-        print(f"🔥 ERRORE recupero saldo: {e}")
-
+def load_db_data():
     with database.session_scope() as session:
-        intents_q = session.query(database.TradeIntent).filter(
-            database.TradeIntent.status.in_(['NEW', 'SIMULATED'])
-        ).order_by(desc(database.TradeIntent.id)).statement # Ordina per ID per stabilità
-        
-        positions_q = session.query(database.OpenPosition).statement
-        
-        signals_df = pd.read_sql(intents_q, database.engine)
-        positions_df = pd.read_sql(positions_q, database.engine)
-        
-        # Simula performance passate
-        past_trades = pd.DataFrame()
-        
-        return signals_df, positions_df, past_trades, total_equity
+        signals_q = session.query(database.TechnicalSignal).order_by(desc(database.TechnicalSignal.id)).statement
+        signals_df = pd.read_sql(signals_q, database.engine, parse_dates=['created_at'])
+        return signals_df
 
-# --- UI PRINCIPALE (verrà rieseguita da Streamlit) ---
-
-# Attiva l'auto-refresh della pagina ogni 30 secondi
-st_autorefresh(interval=30 * 1000, key="data_refresh")
-
-st.title("🔥 Phoenix Trading System Dashboard")
-
-signals, positions, past_trades, total_equity = load_data()
-
-# 1. ANALISI PERFORMANCE
-st.header("📈 Performance & Equity")
-c1, c2, c3, c4 = st.columns(4)
-
-equity_display = f"${total_equity:,.2f}" if isinstance(total_equity, float) else "Errore API"
-c1.metric("Equity Totale Conto", equity_display)
-
-if not past_trades.empty:
-    total_pnl = past_trades['pnl'].sum()
-    win_trades = past_trades[past_trades['pnl'] > 0]
-    win_rate = (len(win_trades) / len(past_trades)) * 100 if not past_trades.empty else 0
-    c2.metric("P&L Realizzato (Sim.)", f"${total_pnl:,.2f}", delta=f"{total_pnl:,.2f}")
-    c3.metric("Win Rate (Sim.)", f"{win_rate:.1f}%")
-else:
-    c2.metric("P&L Realizzato (Sim.)", "N/A")
-    c3.metric("Win Rate (Sim.)", "N/A")
-
-c4.metric("Posizioni Aperte", f"{len(positions)}")
-
-# 2. SEGNALI OPERATIVI
-st.header("🎯 Segnali Operativi in Attesa")
-if not signals.empty:
-    # Aggiungiamo un ulteriore controllo per sicurezza, anche se l'ID dovrebbe essere unico
-    signals = signals.drop_duplicates(subset=['id'], keep='first')
+# Funzione per caricare i dati LIVE da Bybit
+@st.cache_data(ttl=15)
+def load_live_data():
+    if not BybitClient: return 0, []
+    client = BybitClient()
+    balance_data = client.get_wallet_balance()
+    positions_data = client.get_positions()
     
-    for index, signal in signals.iterrows():
-        color = "green" if signal.direction == "Long" else "red"
-        # Usiamo una combinazione di ID e timestamp per una chiave ancora più robusta
-        unique_key_prefix = f"{signal.id}_{int(pd.Timestamp(signal.timestamp).timestamp())}"
+    total_equity = 0
+    if balance_data and balance_data.get('retCode') == 0:
+        try:
+            total_equity = float(balance_data['result']['list'][0]['totalEquity'])
+        except (IndexError, KeyError):
+             total_equity = 0 # Gestisce il caso di wallet vuoto
+        
+    positions_list = []
+    if positions_data and positions_data.get('retCode') == 0:
+        positions_list = positions_data['result']['list']
+        
+    return total_equity, positions_list
 
-        st.subheader(f":{color}[{signal.direction.upper()}] - {signal.symbol} (Score: {signal.score})")
+# --- UI PRINCIPALE ---
+st.title("🔥 Phoenix Command Center v6.0")
+
+if st.button("🔄 Aggiorna Dati"):
+    st.cache_data.clear()
+
+signals_df = load_db_data()
+total_equity_usd, live_positions = load_live_data()
+
+# ===== SEZIONE EQUITY E POSIZIONI LIVE =====
+st.header("🛰️ Telemetria Live dal Conto Bybit")
+
+c1, c2, c3 = st.columns(3)
+c1.metric("Equity Totale Conto (USD)", f"${total_equity_usd:,.2f}")
+
+if live_positions:
+    pos_df = pd.DataFrame(live_positions)
+    pos_df['size'] = pd.to_numeric(pos_df['size'], errors='coerce')
+    open_positions_df = pos_df[pos_df['size'] > 0].copy()
+
+    if not open_positions_df.empty:
+        open_positions_df['unrealisedPnl'] = pd.to_numeric(open_positions_df['unrealisedPnl'], errors='coerce').fillna(0)
+        total_unrealised_pnl = open_positions_df['unrealisedPnl'].sum()
+        
+        c2.metric("Posizioni Aperte", len(open_positions_df))
+        c3.metric("P&L Fluttuante", f"${total_unrealised_pnl:,.2f}", delta=f"{total_unrealised_pnl:,.2f}")
+        
+        st.subheader("Dettaglio Posizioni Aperte")
+        display_cols = ['symbol', 'side', 'size', 'avgPrice', 'unrealisedPnl', 'leverage', 'liqPrice']
+        st.dataframe(open_positions_df[display_cols].rename(columns={
+            'symbol': 'Simbolo', 'side': 'Direzione', 'size': 'Quantità', 
+            'avgPrice': 'Prezzo Medio Ingresso', 'unrealisedPnl': 'P&L non realizzato',
+            'leverage': 'Leva', 'liqPrice': 'Prezzo Liquidazione'
+        }))
+    else:
+        c2.metric("Posizioni Aperte", 0); c3.metric("P&L Fluttuante", "$0.00")
+        st.info("Nessuna posizione attualmente aperta sull'exchange.")
+else:
+    c2.metric("Posizioni Aperte", "N/A"); c3.metric("P&L Fluttuante", "N/A")
+    st.warning("Impossibile recuperare i dati da Bybit. Controlla le chiavi API o la connessione.")
+
+# ===== SEZIONE SEGNALI DAL BOT (CODICE COMPLETO E CORRETTO) =====
+st.header("🎯 Segnali Generati dal Bot")
+
+if not signals_df.empty:
+    for index, signal in signals_df.iterrows():
+        try: details = ast.literal_eval(signal.details)
+        except: details = {}
+            
+        coherence = details.get('coherence', 'N/A')
+        final_score = details.get('final_score', 0)
+        direction = "Long" if "LONG" in signal.signal.upper() else "Short"
+        color = "green" if direction == "Long" else "red"
+        unique_key_prefix = f"sig_{signal.id}"
+        
+        st.subheader(f":{color}[{signal.signal.upper()}] - {signal.asset}")
         
         c1, c2, c3 = st.columns(3)
-        c1.metric("Prezzo di Entrata", f"{signal.entry_price:.4f}")
-        c2.metric("Take Profit", f"{signal.take_profit:.4f}")
-        c3.metric("Stop Loss", f"{signal.stop_loss:.4f}")
+        c1.metric("Timeframe Segnale", signal.timeframe.upper())
+        c2.metric("Coerenza", str(coherence))
+        c3.metric("Score Finale", f"{final_score}")
+        
+        c_prices1, c_prices2, c_prices3 = st.columns(3)
+        entry_price = float(signal.entry_price)
+        take_profit = float(signal.take_profit) if signal.take_profit else 0
+        stop_loss = float(signal.stop_loss) if signal.stop_loss else 0
+        
+        c_prices1.metric("Prezzo Entrata", f"{entry_price:.4f}")
+        c_prices2.metric("Take Profit", f"{take_profit:.4f}")
+        c_prices3.metric("Stop Loss", f"{stop_loss:.4f}")
         
         with st.expander("Calcolatore Rischio/Rendimento"):
             leverage = st.slider("Leva", 1, 50, 10, key=f"lev_{unique_key_prefix}")
             investment = st.number_input("Importo Investimento ($)", min_value=10.0, value=100.0, step=10.0, key=f"inv_{unique_key_prefix}")
             
-            position_size = (investment * leverage) / signal.entry_price
-            potential_profit = (signal.take_profit - signal.entry_price) * position_size if signal.direction == "Long" else (signal.entry_price - signal.take_profit) * position_size
-            potential_loss = (signal.entry_price - signal.stop_loss) * position_size if signal.direction == "Long" else (signal.stop_loss - signal.entry_price) * position_size
+            position_size = (investment * leverage) / entry_price
+            potential_profit = (take_profit - entry_price) * position_size if direction == "Long" else (entry_price - take_profit) * position_size
+            potential_loss = (entry_price - stop_loss) * position_size if direction == "Long" else (stop_loss - entry_price) * position_size
             
             c_calc1, c_calc2 = st.columns(2)
             c_calc1.success(f"Potenziale Guadagno: ${potential_profit:.2f}")
             c_calc2.error(f"Potenziale Perdita: ${potential_loss:.2f}")
+            
         st.divider()
 else:
-    st.info("Nessun nuovo segnale operativo. In attesa del prossimo ciclo di analisi.")
-
-# 3. TIMER (logica semplificata)
-st.sidebar.header("⚙️ Stato del Sistema")
-st.sidebar.info(f"Pagina aggiornata: {datetime.datetime.now().strftime('%H:%M:%S')}")
-st.sidebar.info("L'aggiornamento automatico è attivo (ogni 30 secondi).")
+    st.info("Nessun nuovo segnale generato dal bot. Esegui il runner per cercare opportunità.")

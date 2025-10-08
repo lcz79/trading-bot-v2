@@ -1,99 +1,139 @@
-import argparse
+# backtester.py - v11.0.0 (The Regime-Aware Engine)
+# ----------------------------------------------------------------
+# - IMPLEMENTAZIONE DIRETTIVA CONSIGLIO #8:
+#   Introdotto il "Market Regime Detector" basato sull'indicatore ADX.
+# - La strategia Mean Reversion ora si attiva SOLO se il mercato è
+#   in un regime di "RANGE" (ADX < 25), come suggerito dal Consiglio.
+# - Questo aggiunge un filtro di contesto strategico per evitare di
+#   operare contro trend troppo forti.
+# ----------------------------------------------------------------
+
+from dotenv import load_dotenv
+load_dotenv()
+
 import pandas as pd
+import pandas_ta as ta
+import numpy as np
+import logging
+from tqdm import tqdm
 
-pd.set_option('display.max_columns', None)
-pd.set_option('display.width', 1000)
+from api_clients.data_client import FinancialDataClient
 
-from api_clients import financial_data_client
-from analysis import market_analysis
-from config import ASSETS_TO_ANALYZE
+# --- Configurazione ---
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
-def run_backtest(symbol, timeframe_str, data_source):
-    print("="*80)
-    print(f"🚀 AVVIO BACKTEST 'MEAN REVERSION V3' per {symbol} | TF: {timeframe_str}")
-    print("="*80)
+ASSETS_TO_BACKTEST = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT', 'LINKUSDT']
+TIMEFRAME_TO_TEST = 'D'
+DATA_SOURCE = 'bybit'
+INITIAL_CAPITAL = 10000
+RISK_PER_TRADE = 0.02
 
-    print("-> Caricamento dati storici...")
-    df_full = financial_data_client.get_data(symbol, timeframe_str, limit=3000, source=data_source)
-    if df_full is None or len(df_full) < 200:
-        print("❌ ERRORE: Dati storici insufficienti.")
-        return
-    print(f"✅ Dati caricati: {len(df_full)} candele dal {df_full.index[0]} al {df_full.index[-1]}")
+# --- MOTORE STRATEGICO v9.0 con FILTRO DI REGIME ---
+def find_regime_filtered_signals(df, rsi_len=14, rsi_low=30, rsi_high=70,
+                                 vol_ma_len=20, vol_z_min=0.8,
+                                 atr_len=14, sl_atr=1.5, tp_atr=2.0,
+                                 adx_len=14, adx_threshold=25):
+    out = []
+    if df is None or len(df) < 100: return out
 
-    print("-> Avvio simulazione...")
-    trades, active_trade = [], None
+    # Indicatori
+    df.ta.rsi(length=rsi_len, append=True)
+    df.ta.atr(length=atr_len, append=True)
+    df.ta.adx(length=adx_len, append=True) # Calcolo ADX
+
+    rsi_col = f'RSI_{rsi_len}'
+    atr_col = f'ATRr_{atr_len}'
+    adx_col = f'ADX_{adx_len}'
+
+    # Z-score del Volume
+    vol_ma = df['volume'].rolling(vol_ma_len).mean()
+    vol_std = df['volume'].rolling(vol_ma_len).std(ddof=0)
+    df['vol_z'] = ((df['volume'] - vol_ma) / vol_std.replace(0, np.nan)).fillna(0.0)
+
+    # Loop sui dati
+    for i in range(len(df) - 2):
+        T = df.iloc[i]
+        T_plus_1 = df.iloc[i+1]
+        
+        # --- FILTRO DI REGIME ---
+        # Se l'ADX è sopra la soglia, il mercato è in trend. Saltiamo.
+        if T[adx_col] >= adx_threshold:
+            continue
+
+        # Se siamo qui, ADX < 25, quindi il mercato è in RANGE. Procediamo.
+        
+        # Setup LONG
+        if T[rsi_col] <= rsi_low and T['vol_z'] >= vol_z_min:
+            if T_plus_1['close'] > T['high']:
+                entry_price = df.iloc[i+2]['open']; sl = T['low'] - (sl_atr * T[atr_col]); tp = entry_price + (tp_atr * T[atr_col])
+                out.append({'side': 'LONG', 'entry_date': df.index[i+2], 'entry_price': entry_price, 'sl': sl, 'tp': tp})
+
+        # Setup SHORT
+        if T[rsi_col] >= rsi_high and T['vol_z'] >= vol_z_min:
+            if T_plus_1['close'] < T['low']:
+                entry_price = df.iloc[i+2]['open']; sl = T['high'] + (sl_atr * T[atr_col]); tp = entry_price - (tp_atr * T[atr_col])
+                out.append({'side': 'SHORT', 'entry_date': df.index[i+2], 'entry_price': entry_price, 'sl': sl, 'tp': tp})
+    return out
+
+# (Le funzioni di backtest e main rimangono quasi identiche, ma chiamano la nuova funzione di scan)
+def run_backtest_with_reporting(asset_symbol: str) -> (dict, list):
+    data_client = FinancialDataClient()
+    df = data_client.get_klines(asset_symbol, TIMEFRAME_TO_TEST, DATA_SOURCE, limit=1500)
+    if df is None or df.empty: return (None, [])
+    df.sort_index(ascending=True, inplace=True)
     
-    for i in range(200, len(df_full)):
-        df_slice = df_full.iloc[:i]
-        current_candle = df_slice.iloc[-1]
-        
-        if active_trade:
-            pnl, close_reason = 0, None
-            if active_trade['side'] == 'LONG':
-                if current_candle['low'] <= active_trade['stop_loss']: close_reason, pnl = "Stop Loss", active_trade['stop_loss'] - active_trade['entry_price']
-                elif current_candle['high'] >= active_trade['take_profit']: close_reason, pnl = "Take Profit", active_trade['take_profit'] - active_trade['entry_price']
-            elif active_trade['side'] == 'SHORT':
-                if current_candle['high'] >= active_trade['stop_loss']: close_reason, pnl = "Stop Loss", active_trade['entry_price'] - active_trade['stop_loss']
-                elif current_candle['low'] <= active_trade['take_profit']: close_reason, pnl = "Take Profit", active_trade['entry_price'] - active_trade['take_profit']
-            if close_reason:
-                active_trade.update({
-                    'exit_price': active_trade['entry_price'] + pnl, 'exit_date': current_candle.name,
-                    'pnl': pnl, 'pnl_percent': (pnl / active_trade['entry_price']) * 100,
-                    'closed_by': close_reason
-                })
-                trades.append(active_trade)
-                active_trade = None
-        
-        if not active_trade:
-            # ORA USIAMO LA NUOVA STRATEGIA "MEAN REVERSION"
-            signal, confidence, details = market_analysis.analyze_mean_reversion_pro(df_slice)
+    signals = find_regime_filtered_signals(df) # <-- Chiamata alla nuova funzione
+    
+    if not signals:
+        summary = {'asset': asset_symbol, 'total_trades': 0, 'winning_trades': 0, 'win_rate': 0, 'total_pnl': 0, 'pnl_perc': 0}
+        return (summary, [])
+
+    executed_trades = []; capital = INITIAL_CAPITAL
+    for signal in signals:
+        trade_risk = capital * RISK_PER_TRADE
+        stop_loss_points = abs(signal['entry_price'] - signal['sl'])
+        size = trade_risk / stop_loss_points if stop_loss_points > 0 else 0
+        if size == 0: continue
+        trade_outcome = {'status': 'OPEN', 'exit_date': None, 'pnl': 0}
+        trade_df = df[df.index > signal['entry_date']]
+        for index, candle in trade_df.iterrows():
+            if signal['side'] == 'LONG':
+                if candle['high'] >= signal['tp']: trade_outcome = {'status': 'TP', 'pnl': (signal['tp'] - signal['entry_price']) * size, 'exit_date': index}; break
+                elif candle['low'] <= signal['sl']: trade_outcome = {'status': 'SL', 'pnl': (signal['sl'] - signal['entry_price']) * size, 'exit_date': index}; break
+            elif signal['side'] == 'SHORT':
+                if candle['low'] <= signal['tp']: trade_outcome = {'status': 'TP', 'pnl': (signal['entry_price'] - signal['tp']) * size, 'exit_date': index}; break
+                elif candle['high'] >= signal['sl']: trade_outcome = {'status': 'SL', 'pnl': (signal['entry_price'] - signal['sl']) * size, 'exit_date': index}; break
+        if trade_outcome['status'] != 'OPEN':
+            capital += trade_outcome['pnl']; trade_details = {'asset': asset_symbol, 'entry_date': signal['entry_date'], 'side': signal['side'], 'entry_price': signal['entry_price'], 'sl': signal['sl'], 'tp': signal['tp'], 'exit_date': trade_outcome['exit_date'], 'status': trade_outcome['status'], 'pnl': trade_outcome['pnl']}; executed_trades.append(trade_details)
+
+    total_pnl, win_rate, winning_trades = 0, 0, 0
+    if executed_trades:
+        report_df = pd.DataFrame(executed_trades); total_pnl = report_df['pnl'].sum(); winning_trades = len(report_df[report_df['pnl'] > 0]); win_rate = (winning_trades / len(executed_trades)) * 100 if executed_trades else 0
+    summary = {'asset': asset_symbol, 'total_trades': len(executed_trades), 'winning_trades': winning_trades, 'win_rate': win_rate, 'total_pnl': total_pnl, 'pnl_perc': total_pnl / INITIAL_CAPITAL}
+    return (summary, executed_trades)
+
+def main():
+    logging.info(f"--- Avvio Backtest di Portafoglio (Direttiva Consiglio #8: The Regime-Aware Engine) ---")
+    all_summaries = []; all_trades = []
+    for asset in tqdm(ASSETS_TO_BACKTEST, desc="Analisi Regime-Aware"):
+        summary, trades = run_backtest_with_reporting(asset)
+        if summary: all_summaries.append(summary)
+        if trades: all_trades.extend(trades)
             
-            if signal != "NEUTRAL":
-                entry_price = current_candle['close']
-                stop_loss, take_profit = market_analysis.calculate_sl_tp(df_slice, signal, entry_price)
-
-                if stop_loss and take_profit:
-                    print(f"  -> {signal} Eseguito a {entry_price:.2f} in data {current_candle.name}")
-                    active_trade = {
-                        'entry_date': current_candle.name,
-                        'entry_price': entry_price,
-                        'side': 'LONG' if 'LONG' in signal else 'SHORT',
-                        'stop_loss': stop_loss,
-                        'take_profit': take_profit,
-                        'details': details
-                    }
-
-    print("✅ Simulazione completata.")
-    print("\n" + "="*80)
-    print("📊 REPORT PERFORMANCE BACKTEST: 'MEAN REVERSION V3'")
-    print("="*80)
-    if not trades:
-        print("Nessun trade eseguito.")
-        return
-    df_trades = pd.DataFrame(trades)
-    total_trades, winning_trades = len(df_trades), df_trades[df_trades['pnl'] > 0]
-    losing_trades = df_trades[df_trades['pnl'] <= 0]
-    win_rate = (len(winning_trades) / total_trades) * 100 if total_trades > 0 else 0
-    profit_factor = abs(winning_trades['pnl'].sum() / losing_trades['pnl'].sum()) if losing_trades['pnl'].sum() != 0 else float('inf')
-    print(f"Asset: {symbol} | Timeframe: {timeframe_str}")
-    print(f"Periodo Testato:\t\t{df_full.index[200].date()} -> {df_full.index[-1].date()}")
-    print("-" * 50)
-    print(f"Totale Trade:\t\t\t{total_trades}")
-    print(f"Win Rate:\t\t\t{win_rate:.2f}%")
-    print(f"Profit Factor:\t\t\t{profit_factor:.2f}")
-    print(f"Profitto/Perdita Totale:\t{df_trades['pnl_percent'].sum():.2f}%")
-    print("-" * 50)
-    print("Dettaglio Trade:")
-    print(df_trades[['entry_date', 'side', 'entry_price', 'exit_date', 'exit_price', 'pnl_percent', 'closed_by']])
+    summary_df = pd.DataFrame(all_summaries)
+    print("\n" + "="*80); print("--- REPORT DI RIEPILOGO DEL PORTAFOGLIO (DIRETTIVA CONSIGLIO #8) ---"); print(f"Timeframe: {TIMEFRAME_TO_TEST} | Strategia: Mean Reversion con Filtro di Regime (ADX < 25)"); print("="*80)
+    if not summary_df.empty:
+        summary_df['pnl_perc'] = summary_df['pnl_perc'].map('{:.2%}'.format)
+        summary_df['win_rate'] = summary_df['win_rate'].map('{:.2f}%'.format)
+        summary_df['total_pnl'] = summary_df['total_pnl'].map('${:,.2f}'.format)
+        print(summary_df[['asset', 'total_trades', 'winning_trades', 'win_rate', 'total_pnl', 'pnl_perc']].to_string(index=False))
+    else: print("Nessun riepilogo da visualizzare.")
     print("="*80)
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Backtest con strategia 'Mean Reversion V3'.")
-    parser.add_argument('--symbol', required=True, help="Simbolo (es. BTCUSDT)")
-    parser.add_argument('--timeframe', required=True, help="Timeframe (es. 60, 240, 1h, 1d)")
-    args = parser.parse_args()
-    asset_config = next((item for item in ASSETS_TO_ANALYZE if item["symbol"] == args.symbol), None)
-    if not asset_config:
-        print(f"❌ ERRORE: Asset '{args.symbol}' non trovato in config.py")
-    else:
-        run_backtest(args.symbol, args.timeframe, asset_config['source'])
+    if all_trades:
+        trades_df = pd.DataFrame(all_trades); trades_df.to_csv("regime_filtered_trades_report.csv", index=False)
+        logging.info("Report dettagliato dei trade (filtrato per regime) salvato in 'regime_filtered_trades_report.csv'.")
+    else: logging.info("Nessun trade eseguito con il filtro di regime. Il report dettagliato non è stato creato.")
+
+if __name__ == "__main__":
+    main()

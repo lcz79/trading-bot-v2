@@ -1,73 +1,80 @@
-# database.py - v3.0.0 (Production Ready)
-# ----------------------------------------------------------------
-# - Compatibile con PostgreSQL e SQLite.
-# - Gestisce correttamente il reset con 'CASCADE' su PostgreSQL.
-# - Codice pulito e formattato secondo le best practice.
-# ----------------------------------------------------------------
+# database.py - (Phoenix Patch v7.0 Applied)
+# Aggiunta la tabella TechnicalSignal per i segnali multi-timeframe.
 
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Enum as SQLAlchemyEnum, text
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, inspect, func, Numeric
 from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy.orm import Session
 from contextlib import contextmanager
-import datetime
-import enum
+from datetime import datetime
 
-# --- Configurazione ---
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///trading_bot.db")
-
-connect_args = {}
-is_postgres = DATABASE_URL.startswith("postgres")
-if DATABASE_URL.startswith("sqlite"):
-    connect_args = {"check_same_thread": False}
-
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# ... (Codice esistente: Base, TradeIntent, OpenPosition, TradeHistory) ...
 Base = declarative_base()
-
-# --- Modelli ---
-class TradeIntentStatus(enum.Enum):
-    NEW = "NEW"; SIMULATED = "SIMULATED"; EXECUTED = "EXECUTED"; CLOSED = "CLOSED"; ERROR = "ERROR"
 
 class TradeIntent(Base):
     __tablename__ = 'trade_intents'
-    id = Column(Integer, primary_key=True, index=True); timestamp = Column(DateTime, default=datetime.datetime.utcnow); symbol = Column(String, index=True); direction = Column(String); entry_price = Column(Float); stop_loss = Column(Float); take_profit = Column(Float); score = Column(Integer); strategy = Column(String); status = Column(SQLAlchemyEnum(TradeIntentStatus), default=TradeIntentStatus.NEW); timeframe = Column(String)
-
-class PerformanceLog(Base):
-    __tablename__ = 'performance_logs'
-    id = Column(Integer, primary_key=True, index=True); timestamp = Column(DateTime, default=datetime.datetime.utcnow); total_equity = Column(Float); unrealized_pnl = Column(Float); realized_pnl = Column(Float)
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String, nullable=False)
+    direction = Column(String, nullable=False)
+    entry_price = Column(Float)
+    take_profit = Column(Float)
+    stop_loss = Column(Float)
+    score = Column(Integer)
+    status = Column(String, default='NEW')
+    timestamp = Column(DateTime, default=datetime.utcnow)
 
 class OpenPosition(Base):
     __tablename__ = 'open_positions'
-    id = Column(Integer, primary_key=True, index=True); symbol = Column(String, unique=True, index=True); side = Column(String); entry_price = Column(Float); size = Column(Float); position_value = Column(Float); leverage = Column(Integer); timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String, nullable=False)
+    direction = Column(String, nullable=False)
+    entry_price = Column(Float, nullable=False)
+    size = Column(Float, nullable=False)
+    take_profit = Column(Float)
+    stop_loss = Column(Float)
+    timestamp = Column(DateTime, default=datetime.utcnow)
 
-# --- Gestione ---
-def init_db(reset: bool = False):
-    print("--- Sincronizzazione Database ---")
-    if reset:
-        print("-> Richiesto reset del database. Eliminazione tabelle...")
-        if is_postgres:
-            print("   -> Rilevato PostgreSQL. Eseguo DROP...CASCADE.")
-            with engine.connect() as connection:
-                with connection.begin():
-                    for table in reversed(Base.metadata.sorted_tables):
-                        connection.execute(text(f'DROP TABLE IF EXISTS "{table.name}" CASCADE;'))
-            print("   -> DROP CASCADE completato.")
-        else:
-            Base.metadata.drop_all(engine)
-        print("-> Tabelle eliminate.")
-    
-    print("-> Sincronizzazione modelli con il database...")
+class TradeHistory(Base):
+    __tablename__ = 'trade_history'
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String, nullable=False)
+    direction = Column(String, nullable=False)
+    entry_price = Column(Float, nullable=False)
+    exit_price = Column(Float, nullable=False)
+    pnl = Column(Float, nullable=False)
+    status = Column(String) # 'TP', 'SL', 'MANUAL'
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+# NUOVA TABELLA
+class TechnicalSignal(Base):
+    __tablename__ = 'technical_signals'
+    id = Column(Integer, primary_key=True)
+    asset = Column(String(20), nullable=False)
+    timeframe = Column(String(10), nullable=False)
+    strategy = Column(String(50))
+    signal = Column(String(100))
+    entry_price = Column(Numeric(20, 8))
+    stop_loss = Column(Numeric(20, 8), nullable=True)
+    take_profit = Column(Numeric(20, 8), nullable=True)
+    details = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+# ... (Codice esistente: engine, Session, init_db, session_scope) ...
+DATABASE_URL = "sqlite:///phoenix_trading.db"
+engine = create_engine(DATABASE_URL)
+Session = sessionmaker(bind=engine)
+
+def init_db():
     Base.metadata.create_all(engine)
-    print("✅ Database pronto e sincronizzato con i modelli.")
 
 @contextmanager
 def session_scope():
-    session = SessionLocal()
+    session = Session()
     try:
         yield session
         session.commit()
-    except Exception:
-        session.rollback(); raise
+    except Exception as e:
+        session.rollback()
+        print(f"Errore di sessione: {e}")
+        raise
     finally:
         session.close()

@@ -1,39 +1,33 @@
-import os
-import time
+# api_clients/bybit_client.py
+# Client per interagire con le API private di Bybit (saldo, posizioni).
+
 from pybit.unified_trading import HTTP
+import config
 
 class BybitClient:
     def __init__(self):
-        self.api_key = os.getenv("BYBIT_API_KEY")
-        self.api_secret = os.getenv("BYBIT_API_SECRET")
-        if not self.api_key or not self.api_secret:
-            raise ValueError("BYBIT_API_KEY e BYBIT_API_SECRET devono essere impostati nel file .env")
-        
-        self.session = HTTP(
-            testnet=False,
-            api_key=self.api_key,
-            api_secret=self.api_secret,
-        )
-
-    def _make_request(self, method, *args, **kwargs):
         try:
-            time.sleep(0.2) # 200ms di attesa per non sovraccaricare l'API
-            response = method(*args, **kwargs)
-            if response.get('retCode') != 0:
-                print(f"Errore durante la richiesta a Bybit: {response.get('retMsg')} (Codice: {response.get('retCode')}).\nRequest → {response.get('req_info')}.")
-                return None
-            return response['result']
+            self.session = HTTP(
+                api_key=config.BYBIT_API_KEY,
+                api_secret=config.BYBIT_API_SECRET
+            )
         except Exception as e:
-            print(f"Errore durante la richiesta a Bybit: {e}")
+            print(f"Errore durante l'inizializzazione del client Bybit: {e}")
+            self.session = None
+
+    def get_wallet_balance(self, account_type="UNIFIED"):
+        if not self.session: return None
+        try:
+            return self.session.get_wallet_balance(accountType=account_type)
+        except Exception as e:
+            print(f"Errore nel recuperare il saldo: {e}")
             return None
 
-    def get_klines(self, symbol, interval, category="linear", limit=200):
-        print(f"-> BybitClient: Recupero K-lines per {symbol} (Interval: {interval}, Category: {category})...")
-        return self._make_request(
-            self.session.get_kline,
-            category=category,
-            symbol=symbol,
-            interval=interval,
-            limit=limit
-        )
-    # ... (gli altri metodi come get_equity, place_order rimangono invariati)
+    def get_positions(self, category="linear"):
+        if not self.session: return None
+        try:
+            # Per i perpetual USDT, la categoria è "linear"
+            return self.session.get_positions(category=category, settleCoin="USDT")
+        except Exception as e:
+            print(f"Errore nel recuperare le posizioni: {e}")
+            return None
