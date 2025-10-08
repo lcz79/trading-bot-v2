@@ -1,0 +1,8 @@
+feat: Stabilizzazione servizi e feed dati live
+
+Corretti numerosi bug in etl_service, exchange_service e app.py che ne impedivano l'avvio o il corretto funzionamento.
+Risolti AttributeError multipli implementando la corretta istanza del client Bybit prima dell'uso.
+Risolti KeyError utilizzando l'accesso sicuro ai dati (.get()) per gestire le risposte API di Bybit.
+Il servizio exchange_service ora sincronizza correttamente il saldo reale del conto e le posizioni aperte.
+La dashboard (app.py) ora carica le chiavi API, visualizza il saldo del conto live e interroga correttamente i segnali per evitare race condition.
+Tutti i servizi principali sono ora robusti e possono essere eseguiti in parallelo.
