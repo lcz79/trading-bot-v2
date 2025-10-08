@@ -1,107 +1,118 @@
-# --- PRIMISSIMA COSA DA FARE: CARICARE LE VARIABILI D'AMBIENTE ---
+# app.py — Phoenix Dashboard v4.2.0 (Streamlit Native)
+# ----------------------------------------------------------------
+# - Rimosso il ciclo 'while True' per risolvere StreamlitDuplicateElementKey.
+# - Integrata la libreria streamlit-autorefresh per aggiornamenti puliti.
+# - Struttura del codice allineata alle best practice di Streamlit.
+# ----------------------------------------------------------------
+
 from dotenv import load_dotenv
 load_dotenv()
-# --------------------------------------------------------------------
 
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 import pandas as pd
-import time
-from datetime import datetime, timedelta
 import database
+from sqlalchemy import desc
+import time
+import datetime
+from api_clients.bybit_client import BybitClient
 
-# --- CONFIGURAZIONE PAGINA ---
-st.set_page_config(page_title="Trading Bot Dashboard", layout="wide", initial_sidebar_state="expanded")
+# --- Configurazione Pagina (eseguita una sola volta) ---
+st.set_page_config(page_title="Phoenix Dashboard", page_icon="🔥", layout="wide")
+database.init_db()
 
-# --- FUNZIONI DI STILE E COUNTDOWN ---
-
-def style_signals_table(df):
-    def highlight_signal(row):
-        signal_text = str(row.get('signal', '')).upper()
-        color = ''
-        if 'LONG' in signal_text:
-            color = 'background-color: rgba(46, 139, 87, 0.3);'
-        elif 'SHORT' in signal_text:
-            color = 'background-color: rgba(139, 0, 0, 0.2);'
-        return [color] * len(row)
-    return df.style.apply(highlight_signal, axis=1)
-
-def get_countdown_to_next_interval(interval_minutes):
-    now = datetime.now()
-    minutes_past_hour = now.minute
-    intervals_past = minutes_past_hour // interval_minutes
-    next_run_minute = (intervals_past + 1) * interval_minutes
-    
-    if next_run_minute >= 60:
-        next_run_time = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-    else:
-        next_run_time = now.replace(minute=next_run_minute, second=0, microsecond=0)
-
-    delta = next_run_time - now
-    minutes, seconds = divmod(int(delta.total_seconds()), 60)
-    return f"tra {minutes} min e {seconds} sec"
-
-# --- FUNZIONI DI CARICAMENTO DATI ---
-@st.cache_data(ttl=60)
+# --- Funzioni di Utilità ---
+@st.cache_data(ttl=30)
 def load_data():
-    # Usiamo il nuovo session_scope anche per la lettura per coerenza
+    """Carica tutti i dati necessari dal database e dall'exchange."""
+    print(f"[{time.ctime()}] Eseguo load_data...")
+    total_equity = "N/A"
+    
+    try:
+        client = BybitClient()
+        balance_data = client.session.get_wallet_balance(accountType="UNIFIED")
+        if balance_data and balance_data['retCode'] == 0:
+            total_equity = float(balance_data['result']['list'][0]['totalEquity'])
+    except Exception as e:
+        print(f"🔥 ERRORE recupero saldo: {e}")
+
     with database.session_scope() as session:
-        performance_df = pd.read_sql("SELECT * FROM performance_log ORDER BY timestamp DESC LIMIT 100", session.bind)
-        signals_df = pd.read_sql("SELECT * FROM technical_signals ORDER BY created_at DESC", session.bind)
-        quality_df = pd.read_sql("SELECT * FROM quality_scores ORDER BY quality_score DESC", session.bind)
-        positions_df = pd.read_sql("SELECT * FROM open_positions", session.bind)
-    return performance_df, signals_df, quality_df, positions_df
+        intents_q = session.query(database.TradeIntent).filter(
+            database.TradeIntent.status.in_(['NEW', 'SIMULATED'])
+        ).order_by(desc(database.TradeIntent.id)).statement # Ordina per ID per stabilità
+        
+        positions_q = session.query(database.OpenPosition).statement
+        
+        signals_df = pd.read_sql(intents_q, database.engine)
+        positions_df = pd.read_sql(positions_q, database.engine)
+        
+        # Simula performance passate
+        past_trades = pd.DataFrame()
+        
+        return signals_df, positions_df, past_trades, total_equity
 
-# --- TITOLO E HEADER ---
-st.title("📈 Trading Bot Dashboard v3.4 (Env Fix)")
-st.markdown(f"Ultimo aggiornamento della dashboard: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`")
+# --- UI PRINCIPALE (verrà rieseguita da Streamlit) ---
 
-# --- PANNELLO DI STATO DEI SERVIZI ---
-# ... (il resto del file rimane identico) ...
-st.subheader("Stato dei Servizi")
-col1, col2 = st.columns(2)
-with col1:
-    st.metric(label="Stato Exchange Service", value="ATTIVO ✅")
-    countdown_exchange_placeholder = st.empty()
-with col2:
-    st.metric(label="Stato ETL Service (Analisi)", value="ATTIVO ✅")
-    countdown_etl_placeholder = st.empty()
+# Attiva l'auto-refresh della pagina ogni 30 secondi
+st_autorefresh(interval=30 * 1000, key="data_refresh")
 
-# --- CARICAMENTO DATI INIZIALE ---
-performance_df, signals_df, quality_df, positions_df = load_data()
+st.title("🔥 Phoenix Trading System Dashboard")
 
-# --- DASHBOARD PRINCIPALE ---
-st.header("Performance Finanziaria")
-if not performance_df.empty:
-    latest_perf = performance_df.iloc[0]
-    equity = float(latest_perf['total_equity'])
-    pnl = float(latest_perf['unrealized_pnl'])
-    c1, c2 = st.columns(2)
-    c1.metric("Total Equity (USDT)", f"${equity:,.2f}")
-    c2.metric("Unrealized P&L (USDT)", f"${pnl:,.2f}", delta_color=("inverse" if pnl < 0 else "normal"))
-    st.line_chart(performance_df.rename(columns={'timestamp':'index'}).set_index('index')['total_equity'])
+signals, positions, past_trades, total_equity = load_data()
+
+# 1. ANALISI PERFORMANCE
+st.header("📈 Performance & Equity")
+c1, c2, c3, c4 = st.columns(4)
+
+equity_display = f"${total_equity:,.2f}" if isinstance(total_equity, float) else "Errore API"
+c1.metric("Equity Totale Conto", equity_display)
+
+if not past_trades.empty:
+    total_pnl = past_trades['pnl'].sum()
+    win_trades = past_trades[past_trades['pnl'] > 0]
+    win_rate = (len(win_trades) / len(past_trades)) * 100 if not past_trades.empty else 0
+    c2.metric("P&L Realizzato (Sim.)", f"${total_pnl:,.2f}", delta=f"{total_pnl:,.2f}")
+    c3.metric("Win Rate (Sim.)", f"{win_rate:.1f}%")
 else:
-    st.warning("Nessun dato di performance trovato.")
+    c2.metric("P&L Realizzato (Sim.)", "N/A")
+    c3.metric("Win Rate (Sim.)", "N/A")
 
-st.header("Posizioni Aperte")
-if not positions_df.empty:
-    st.dataframe(positions_df, use_container_width=True)
+c4.metric("Posizioni Aperte", f"{len(positions)}")
+
+# 2. SEGNALI OPERATIVI
+st.header("🎯 Segnali Operativi in Attesa")
+if not signals.empty:
+    # Aggiungiamo un ulteriore controllo per sicurezza, anche se l'ID dovrebbe essere unico
+    signals = signals.drop_duplicates(subset=['id'], keep='first')
+    
+    for index, signal in signals.iterrows():
+        color = "green" if signal.direction == "Long" else "red"
+        # Usiamo una combinazione di ID e timestamp per una chiave ancora più robusta
+        unique_key_prefix = f"{signal.id}_{int(pd.Timestamp(signal.timestamp).timestamp())}"
+
+        st.subheader(f":{color}[{signal.direction.upper()}] - {signal.symbol} (Score: {signal.score})")
+        
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Prezzo di Entrata", f"{signal.entry_price:.4f}")
+        c2.metric("Take Profit", f"{signal.take_profit:.4f}")
+        c3.metric("Stop Loss", f"{signal.stop_loss:.4f}")
+        
+        with st.expander("Calcolatore Rischio/Rendimento"):
+            leverage = st.slider("Leva", 1, 50, 10, key=f"lev_{unique_key_prefix}")
+            investment = st.number_input("Importo Investimento ($)", min_value=10.0, value=100.0, step=10.0, key=f"inv_{unique_key_prefix}")
+            
+            position_size = (investment * leverage) / signal.entry_price
+            potential_profit = (signal.take_profit - signal.entry_price) * position_size if signal.direction == "Long" else (signal.entry_price - signal.take_profit) * position_size
+            potential_loss = (signal.entry_price - signal.stop_loss) * position_size if signal.direction == "Long" else (signal.stop_loss - signal.entry_price) * position_size
+            
+            c_calc1, c_calc2 = st.columns(2)
+            c_calc1.success(f"Potenziale Guadagno: ${potential_profit:.2f}")
+            c_calc2.error(f"Potenziale Perdita: ${potential_loss:.2f}")
+        st.divider()
 else:
-    st.info("Nessuna posizione aperta al momento.")
+    st.info("Nessun nuovo segnale operativo. In attesa del prossimo ciclo di analisi.")
 
-st.header("Segnali di Mercato Recenti")
-if not signals_df.empty:
-    st.dataframe(style_signals_table(signals_df), use_container_width=True)
-else:
-    st.info("Nessun segnale tecnico generato nell'ultimo ciclo.")
-
-st.header("Asset Quality Score")
-if not quality_df.empty:
-    st.dataframe(quality_df, use_container_width=True)
-else:
-    st.warning("Nessun dato di quality score trovato.")
-
-# --- LOOP DI AGGIORNAMENTO COUNTDOWN ---
-while True:
-    countdown_exchange_placeholder.markdown(f"**Prossimo aggiornamento Saldo/Posizioni:** {get_countdown_to_next_interval(15)}")
-    countdown_etl_placeholder.markdown(f"**Prossimo Scan di Mercato:** {get_countdown_to_next_interval(30)}")
-    time.sleep(1)
+# 3. TIMER (logica semplificata)
+st.sidebar.header("⚙️ Stato del Sistema")
+st.sidebar.info(f"Pagina aggiornata: {datetime.datetime.now().strftime('%H:%M:%S')}")
+st.sidebar.info("L'aggiornamento automatico è attivo (ogni 30 secondi).")

@@ -1,85 +1,65 @@
+# database.py - v3.0.0 (Production Ready)
+# ----------------------------------------------------------------
+# - Compatibile con PostgreSQL e SQLite.
+# - Gestisce correttamente il reset con 'CASCADE' su PostgreSQL.
+# - Codice pulito e formattato secondo le best practice.
+# ----------------------------------------------------------------
+
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, MetaData, ForeignKey
-from sqlalchemy.orm import sessionmaker, declarative_base, relationship
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Enum as SQLAlchemyEnum, text
+from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import Session
 from contextlib import contextmanager
-from datetime import datetime
+import datetime
+import enum
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///trading_bot.db")
+# --- Configurazione ---
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///trading_bot.db")
 
-engine = create_engine(DATABASE_URL)
+connect_args = {}
+is_postgres = DATABASE_URL.startswith("postgres")
+if DATABASE_URL.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
+
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# --- Definizione dei Modelli ---
+# --- Modelli ---
+class TradeIntentStatus(enum.Enum):
+    NEW = "NEW"; SIMULATED = "SIMULATED"; EXECUTED = "EXECUTED"; CLOSED = "CLOSED"; ERROR = "ERROR"
 
 class TradeIntent(Base):
     __tablename__ = 'trade_intents'
+    id = Column(Integer, primary_key=True, index=True); timestamp = Column(DateTime, default=datetime.datetime.utcnow); symbol = Column(String, index=True); direction = Column(String); entry_price = Column(Float); stop_loss = Column(Float); take_profit = Column(Float); score = Column(Integer); strategy = Column(String); status = Column(SQLAlchemyEnum(TradeIntentStatus), default=TradeIntentStatus.NEW); timeframe = Column(String)
 
-    id = Column(Integer, primary_key=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    symbol = Column(String, nullable=False)
-    direction = Column(String, nullable=False)
-    entry_price = Column(Float, nullable=False)
-    stop_loss = Column(Float, nullable=False)
-    take_profit = Column(Float, nullable=False)
-    status = Column(String, default='NEW', nullable=False)
-    timeframe = Column(String)
-    strategy = Column(String)
-    
-    # Aggiungiamo la relazione: un intento può avere più ordini (anche se di solito è uno)
-    orders = relationship("Order", back_populates="intent")
-
-    def __repr__(self):
-        return f"<TradeIntent(id={self.id}, symbol='{self.symbol}', status='{self.status}')>"
-
-# --- NUOVO MODELLO AGGIUNTO ---
-class Order(Base):
-    """
-    Rappresenta un ordine eseguito sull'exchange.
-    Questo modello era mancante e causava l'errore di dipendenza.
-    """
-    __tablename__ = 'orders'
-
-    id = Column(Integer, primary_key=True)
-    # Collega questo ordine all'intento che lo ha generato
-    intent_id = Column(Integer, ForeignKey('trade_intents.id'), nullable=False)
-    
-    symbol = Column(String, nullable=False)
-    order_id = Column(String, unique=True, nullable=False)
-    status = Column(String, nullable=False) # e.g., 'NEW', 'FILLED', 'CANCELED'
-    side = Column(String, nullable=False) # 'Buy' or 'Sell'
-    price = Column(Float, nullable=False)
-    qty = Column(Float, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-
-    # Aggiungiamo la relazione inversa
-    intent = relationship("TradeIntent", back_populates="orders")
-
-    def __repr__(self):
-        return f"<Order(id={self.id}, order_id='{self.order_id}', status='{self.status}')>"
-# -----------------------------
+class PerformanceLog(Base):
+    __tablename__ = 'performance_logs'
+    id = Column(Integer, primary_key=True, index=True); timestamp = Column(DateTime, default=datetime.datetime.utcnow); total_equity = Column(Float); unrealized_pnl = Column(Float); realized_pnl = Column(Float)
 
 class OpenPosition(Base):
     __tablename__ = 'open_positions'
-    id = Column(Integer, primary_key=True)
-    symbol = Column(String, nullable=False, unique=True)
-    side = Column(String, nullable=False)
-    entry_price = Column(Float, nullable=False)
-    size = Column(Float, nullable=False)
-    position_value = Column(Float, nullable=False)
-    leverage = Column(Integer, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    id = Column(Integer, primary_key=True, index=True); symbol = Column(String, unique=True, index=True); side = Column(String); entry_price = Column(Float); size = Column(Float); position_value = Column(Float); leverage = Column(Integer); timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
-# --- Funzioni di Utilità del Database ---
-
-def init_db():
+# --- Gestione ---
+def init_db(reset: bool = False):
+    print("--- Sincronizzazione Database ---")
+    if reset:
+        print("-> Richiesto reset del database. Eliminazione tabelle...")
+        if is_postgres:
+            print("   -> Rilevato PostgreSQL. Eseguo DROP...CASCADE.")
+            with engine.connect() as connection:
+                with connection.begin():
+                    for table in reversed(Base.metadata.sorted_tables):
+                        connection.execute(text(f'DROP TABLE IF EXISTS "{table.name}" CASCADE;'))
+            print("   -> DROP CASCADE completato.")
+        else:
+            Base.metadata.drop_all(engine)
+        print("-> Tabelle eliminate.")
+    
     print("-> Sincronizzazione modelli con il database...")
-    try:
-        Base.metadata.create_all(bind=engine)
-        print("✅ Database pronto e sincronizzato con i modelli.")
-    except SQLAlchemyError as e:
-        print(f"🔥 Errore durante l'inizializzazione del database: {e}")
+    Base.metadata.create_all(engine)
+    print("✅ Database pronto e sincronizzato con i modelli.")
 
 @contextmanager
 def session_scope():
@@ -87,9 +67,7 @@ def session_scope():
     try:
         yield session
         session.commit()
-    except SQLAlchemyError as e:
-        print(f"🔥 Errore di sessione database: {e}")
-        session.rollback()
-        raise
+    except Exception:
+        session.rollback(); raise
     finally:
         session.close()
