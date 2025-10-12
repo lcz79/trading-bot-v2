@@ -1,3 +1,35 @@
+# Phoenix Trading Bot v7 - Requirements
+
+# --- Core Dependencies ---
+python-dotenv==1.0.1
+requests==2.32.3
+pandas==2.2.2
+numpy==1.26.4
+schedule==1.2.1
+
+# --- API Clients ---
+pybit==5.7.0          # per connessione Bybit v5 unified
+aiohttp==3.9.5        # per richieste asincrone (future)
+urllib3==2.2.3
+
+# --- Data Storage & ORM ---
+SQLAlchemy==2.0.31
+psycopg2-binary==2.9.9  # se usi PostgreSQL
+alembic==1.13.2          # migrazioni future
+
+# --- Dashboard ---
+streamlit==1.38.0
+plotly==5.23.0
+matplotlib==3.9.1
+
+# --- Utilities ---
+tqdm==4.66.4
+colorama==0.4.6
+loguru==0.7.2
+
+# --- Optional (testing & debug) ---
+pytest==8.3.2
+ipython==8.25.0
 python-dotenv
 requests
 pandas
