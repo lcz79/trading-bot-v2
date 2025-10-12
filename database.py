@@ -1,5 +1,5 @@
-# database.py - (Phoenix Patch v7.0 Applied)
-# Aggiunta la tabella TechnicalSignal per i segnali multi-timeframe.
+# database.py - (Phoenix Patch v7.1 Applied)
+# Aggiunta la tabella TechnicalSignal e Fundamentals per i dati CoinGecko.
 
 import os
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, inspect, func, Numeric
@@ -7,9 +7,10 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from contextlib import contextmanager
 from datetime import datetime
 
-# ... (Codice esistente: Base, TradeIntent, OpenPosition, TradeHistory) ...
+# --- Base ORM ---
 Base = declarative_base()
 
+# --- Tabelle Trading Core ---
 class TradeIntent(Base):
     __tablename__ = 'trade_intents'
     id = Column(Integer, primary_key=True)
@@ -22,6 +23,7 @@ class TradeIntent(Base):
     status = Column(String, default='NEW')
     timestamp = Column(DateTime, default=datetime.utcnow)
 
+
 class OpenPosition(Base):
     __tablename__ = 'open_positions'
     id = Column(Integer, primary_key=True)
@@ -33,6 +35,7 @@ class OpenPosition(Base):
     stop_loss = Column(Float)
     timestamp = Column(DateTime, default=datetime.utcnow)
 
+
 class TradeHistory(Base):
     __tablename__ = 'trade_history'
     id = Column(Integer, primary_key=True)
@@ -41,10 +44,11 @@ class TradeHistory(Base):
     entry_price = Column(Float, nullable=False)
     exit_price = Column(Float, nullable=False)
     pnl = Column(Float, nullable=False)
-    status = Column(String) # 'TP', 'SL', 'MANUAL'
+    status = Column(String)  # 'TP', 'SL', 'MANUAL'
     timestamp = Column(DateTime, default=datetime.utcnow)
 
-# NUOVA TABELLA
+
+# --- Tabella Segnali Tecnici ---
 class TechnicalSignal(Base):
     __tablename__ = 'technical_signals'
     id = Column(Integer, primary_key=True)
@@ -58,7 +62,23 @@ class TechnicalSignal(Base):
     details = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-# ... (Codice esistente: engine, Session, init_db, session_scope) ...
+
+# --- Tabella Dati Fondamentali CoinGecko ---
+class FundamentalAsset(Base):
+    __tablename__ = 'fundamentals'
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String(20), nullable=False)
+    coin_id = Column(String(50), nullable=False)
+    name = Column(String(100))
+    market_cap = Column(Float)
+    volume_24h = Column(Float)
+    price = Column(Float)
+    change_24h = Column(Float)
+    rank = Column(Integer)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+
+# --- Engine e Gestione Sessione ---
 DATABASE_URL = "sqlite:///phoenix_trading.db"
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)

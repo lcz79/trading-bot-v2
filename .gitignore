@@ -1,5 +1,19 @@
-.env
+# Ambienti virtuali
 venv/
+.env
+
+# File di cache
 __pycache__/
 *.pyc
+*.pyo
+*.log
+
+# Database locali
+*.db
+phoenix_trading.db
+
+# File di sistema
 .DS_Store
+
+# Streamlit cache
+.streamlit/

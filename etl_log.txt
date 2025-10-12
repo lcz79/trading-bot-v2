@@ -1,0 +1,27 @@
+[2025-10-12 19:52:34] [INFO] - --- Avvio Servizio ETL (v6.0 - Final Production) ---
+[2025-10-12 19:52:34] [INFO] - === AVVIO CICLO DI ANALISI ETL (v6.0) ===
+[2025-10-12 19:52:34] [INFO] - Fase 1: Quality Scoring (bulk request)...
+[2025-10-12 19:52:34] [INFO] - Richiesta bulk a CoinGecko per 10 asset...
+[2025-10-12 19:52:34] [INFO] - ✅ Dati CoinGecko ottenuti per 9 asset.
+[2025-10-12 19:52:34] [INFO] - ✅ Dati fondamentali ottenuti per BTC (bitcoin)
+[2025-10-12 19:52:34] [INFO] - ✅ Dati fondamentali ottenuti per ETH (ethereum)
+[2025-10-12 19:52:34] [INFO] - ✅ Dati fondamentali ottenuti per SOL (solana)
+[2025-10-12 19:52:34] [INFO] - ✅ Dati fondamentali ottenuti per XRP (ripple)
+[2025-10-12 19:52:34] [INFO] - ✅ Dati fondamentali ottenuti per DOGE (dogecoin)
+[2025-10-12 19:52:34] [INFO] - ✅ Dati fondamentali ottenuti per ADA (cardano)
+[2025-10-12 19:52:34] [INFO] - ✅ Dati fondamentali ottenuti per AVAX (avalanche-2)
+[2025-10-12 19:52:34] [INFO] - ✅ Dati fondamentali ottenuti per LINK (chainlink)
+[2025-10-12 19:52:34] [WARNING] - Nessun dato CoinGecko per MATIC (polygon)
+[2025-10-12 19:52:34] [INFO] - ✅ Dati fondamentali ottenuti per DOT (polkadot)
+[2025-10-12 19:52:34] [INFO] - Dati fondamentali completi per 9 asset su 10 totali.
+[2025-10-12 19:52:34] [INFO] - Fase 2: Analisi tecniche (Bybit)...
+[2025-10-12 19:52:35] [INFO] - 📊 Analisi HTF 1D per DOGEUSDT completata (300 barre).
+[2025-10-12 19:52:35] [INFO] - 📊 Analisi HTF 1D per SOLUSDT completata (300 barre).
+[2025-10-12 19:52:35] [INFO] - 📊 Analisi HTF 1D per XRPUSDT completata (300 barre).
+[2025-10-12 19:52:35] [INFO] - 📊 Analisi HTF 1D per ETHUSDT completata (300 barre).
+[2025-10-12 19:52:35] [INFO] - 📊 Analisi HTF 1D per BTCUSDT completata (300 barre).
+[2025-10-12 19:52:35] [INFO] - 📊 Analisi HTF 1D per LINKUSDT completata (300 barre).
+[2025-10-12 19:52:35] [INFO] - 📊 Analisi HTF 1D per ADAUSDT completata (300 barre).
+[2025-10-12 19:52:35] [INFO] - 📊 Analisi HTF 1D per AVAXUSDT completata (300 barre).
+[2025-10-12 19:52:35] [INFO] - 📊 Analisi HTF 1D per DOTUSDT completata (300 barre).
+[2025-10-12 19:52:35] [INFO] - === ✅ CICLO COMPLETATO - Prossimo tra 30 minuti ===

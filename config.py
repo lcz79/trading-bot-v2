@@ -16,43 +16,43 @@ SESSION_START_TIME = time(8, 0)
 SESSION_END_TIME   = time(22, 0)
 
 # === TIMEFRAMES ===
-CONTEXT_TIMEFRAME = "4h"             # Timeframe per decidere il trend (BIAS)
-OPERATIONAL_TIMEFRAME = "15m"        # Timeframe per trovare i segnali di ingresso
+CONTEXT_TIMEFRAME = "4h"
+OPERATIONAL_TIMEFRAME = "15m"
+
+# === CONFIGURAZIONE TIMEFRAMES PER TIPO DI ASSET ===
+TIMEFRAMES_CONFIG = {
+    'crypto': ['1d', '4h', '1h', '15m']
+}
 
 # === REGOLE DI RISCHIO INTRADAY ===
 MAX_LOSS_PERC_DAY = 0.02
-MAX_TRADES_PER_DAY = 10              # Aumentato leggermente
-COOLDOWN_MIN_AFTER_LOSS = 15       # Ridotto leggermente
+MAX_TRADES_PER_DAY = 10
+COOLDOWN_MIN_AFTER_LOSS = 15
 MIN_MINUTES_BEFORE_CLOSE = 15
 EOD_FLATTEN_WINDOW_MIN = 5
-INTRADAY_SIGNAL_SCORE_THRESHOLD = 60 # Leggermente abbassato per più segnali
+INTRADAY_SIGNAL_SCORE_THRESHOLD = 60
 
 # === PARAMETRI INDICATORI E STRATEGIE ===
-# Contesto (4h)
-EMA_CONTEXT_PERIOD = 200
-ADX_CONTEXT_PERIOD = 14
-ADX_CONTEXT_THRESHOLD = 18
-
-# Trigger (15m)
-ATR_PERIOD = 14
-RSI_PERIOD = 14
-ADX_PERIOD = 14
-
-# VWAP Reversion
-VWAP_ATR_MULTIPLIER = 1            # Leggermente più sensibile
-VWAP_ADX_THRESHOLD = 25    # OTTIMIZZATO!
-
-# Opening Range Breakout
-ORB_MINUTES = 30
-
-# Bollinger Bands Squeeze
-BBANDS_PERIOD = 20
-BBANDS_STD = 2.0
+STRATEGY_PARAMS = {
+    'context': { 'ema_period': 200, 'adx_period': 14, 'adx_threshold': 18 },
+    'trigger': { 'atr_period': 14, 'rsi_period': 14, 'adx_period': 14 },
+    'vwap_reversion': { 'atr_multiplier': 1, 'adx_threshold': 25 },
+    'orb': { 'minutes': 30 },
+    'bollinger_bands': { 'period': 20, 'std_dev': 2.0 }
+}
 
 # === ASSET & RUNNER ===
-ASSET_UNIVERSE = [
-    "BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT",
-    "ADAUSDT", "AVAXUSDT", "LINKUSDT", "MATICUSDT", "DOTUSDT"
+ASSETS_TO_ANALYZE = [
+    {"symbol": "BTCUSDT", "type": "crypto", "source": "bybit"},
+    {"symbol": "ETHUSDT", "type": "crypto", "source": "bybit"},
+    {"symbol": "SOLUSDT", "type": "crypto", "source": "bybit"},
+    {"symbol": "XRPUSDT", "type": "crypto", "source": "bybit"},
+    {"symbol": "DOGEUSDT", "type": "crypto", "source": "bybit"},
+    {"symbol": "ADAUSDT", "type": "crypto", "source": "bybit"},
+    {"symbol": "AVAXUSDT", "type": "crypto", "source": "bybit"},
+    {"symbol": "LINKUSDT", "type": "crypto", "source": "bybit"},
+    {"symbol": "MATICUSDT", "type": "crypto", "source": "bybit"},
+    {"symbol": "DOTUSDT", "type": "crypto", "source": "bybit"}
 ]
 RUNNER_SLEEP_SECONDS = 60
 
@@ -63,16 +63,9 @@ BACKTEST_END_DATE = "2025-09-30"
 
 # === TRAILING STOP ===
 TRAILING_STOP_ENABLED = True
-TRAILING_STOP_ATR_MULT = 3.0 # Distanza dal prezzo a cui il trailing stop seguirà
+TRAILING_STOP_ATR_MULT = 3.0
 
-# In config.py
-
-# ... tutte le altre tue configurazioni ...
-
-# === PORTFOLIO GENETICO (DA INCOLLARE QUI SOTTO) ===
-# Incolla qui il blocco 'OPTIMIZED_PARAMS' generato da optimizer.py
-
-# In config.py
+# === PORTFOLIO GENETICO ===
 OPTIMIZED_PARAMS = {
     "BTCUSDT": {'k_atr': 0.8, 'rsi_len': 14, 'adx_threshold': 25},
     "ETHUSDT": {'k_atr': 0.8, 'rsi_len': 16, 'adx_threshold': 28},
