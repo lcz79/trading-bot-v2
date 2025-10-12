@@ -1,9 +1,14 @@
-# config.template.py - Modello di configurazione per PHOENIX v9.0 "High-Density Scanner"
+# config.py - Modello di configurazione per PHOENIX v9.0 "High-Density Scanner"
+import os
+from dotenv import load_dotenv
 from datetime import time
 
-# --- BYBIT API CREDENTIALS ---
-BYBIT_API_KEY = "rr6UyDI6V0bEUQq3CC"
-BYBIT_API_SECRET = "5ztDkRmKggRVFeUTS9q9sqf56yzNm4yq1vXG"
+# Carica le variabili dal file .env
+load_dotenv()
+
+# --- BYBIT API CREDENTIALS (Caricate in modo sicuro dall'ambiente) ---
+BYBIT_API_KEY = os.getenv("BYBIT_API_KEY")
+BYBIT_API_SECRET = os.getenv("BYBIT_API_SECRET")
 
 # === IMPOSTAZIONI DI SESSIONE ===
 TIMEZONE = "Europe/Rome"
