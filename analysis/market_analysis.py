@@ -1,10 +1,9 @@
-# analysis/market_analysis.py - v9.0 (Motore Dinamico basato su Parametri Ottimali)
+# analysis/market_analysis.py - v9.1 (FIX: Correzione calcolo TP/SL per segnali SHORT)
 import pandas as pd
 import pandas_ta as ta
 import logging
 from datetime import datetime, timezone
 
-# Importiamo solo il database, perché la logica ora è autonoma
 import database as db
 
 def run_pullback_analysis(symbol: str, data_1h: pd.DataFrame, params: dict):
@@ -26,11 +25,9 @@ def run_pullback_analysis(symbol: str, data_1h: pd.DataFrame, params: dict):
     df.ta.ema(length=ema_fast, append=True)
     df.ta.ema(length=ema_slow, append=True)
     
-    # Abbiamo bisogno di almeno 3 candele per avere prev_prev, prev, e current
     if len(df) < 3:
         return
 
-    # Usiamo la penultima candela per le condizioni e l'ultima per l'ingresso
     prev_candle = df.iloc[-2]
     current_candle = df.iloc[-1]
     
@@ -44,7 +41,7 @@ def run_pullback_analysis(symbol: str, data_1h: pd.DataFrame, params: dict):
     if is_uptrend and is_pullback_long and is_reversal_candle_long:
         final_signal = "LONG"
         entry_price = current_candle['close']
-        stop_loss = df.iloc[-3]['low'] # Usiamo il minimo di 2 candele fa per più sicurezza
+        stop_loss = df.iloc[-3]['low']
         take_profit = entry_price + ((entry_price - stop_loss) * rr_ratio)
 
     # CONDIZIONI PER UN PULLBACK SHORT
@@ -55,25 +52,29 @@ def run_pullback_analysis(symbol: str, data_1h: pd.DataFrame, params: dict):
     if not final_signal and is_downtrend and is_pullback_short and is_reversal_candle_short:
         final_signal = "SHORT"
         entry_price = current_candle['close']
-        stop_loss = df.iloc[-3]['high'] # Usiamo il massimo di 2 candele fa
-        take_profit = entry_price - ((stop_loss - entry_price) * rr_ratio)
+        stop_loss = df.iloc[-3]['high']
+        
+        # --- QUI C'ERA L'ERRORE ---
+        # Calcoliamo la distanza del rischio (sempre un numero positivo)
+        risk_distance = stop_loss - entry_price
+        # Sottraiamo la distanza del profitto (rischio * ratio) dal prezzo di ingresso
+        take_profit = entry_price - (risk_distance * rr_ratio)
+        # --- FINE CORREZIONE ---
 
     if final_signal:
         logging.info(f"✅ SEGNALE TROVATO per {symbol}: {final_signal}")
         
-        # Controlla se un segnale simile è già stato salvato di recente
         if db.check_recent_signal(symbol, final_signal):
             logging.info(f"Segnale per {symbol} ({final_signal}) già registrato di recente. Salto.")
             return
 
-        # Salva il segnale nel database
         db.save_signal({
             "timestamp": datetime.now(timezone.utc),
             "symbol": symbol,
             "signal_type": final_signal,
             "timeframe": f"PULLBACK {ema_slow}/{ema_fast}",
             "strategy": "Optimized Pullback",
-            "score": params.get('profit_factor', 0), # Usiamo il PF come 'score'
+            "score": params.get('profit_factor', 0),
             "details": f"RR: {rr_ratio}, PF: {params.get('profit_factor', 0)}",
             "entry_price": round(entry_price, 4),
             "stop_loss": round(stop_loss, 4),
