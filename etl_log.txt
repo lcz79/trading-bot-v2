@@ -25,3 +25,131 @@
 [2025-10-12 19:52:35] [INFO] - 📊 Analisi HTF 1D per AVAXUSDT completata (300 barre).
 [2025-10-12 19:52:35] [INFO] - 📊 Analisi HTF 1D per DOTUSDT completata (300 barre).
 [2025-10-12 19:52:35] [INFO] - === ✅ CICLO COMPLETATO - Prossimo tra 30 minuti ===
+[2025-10-12 21:23:50] [INFO] - --- Avvio Servizio ETL (v7.1 Real Market Sync) ---
+[2025-10-12 21:23:50] [INFO] - === AVVIO CICLO DI ANALISI ETL (v7.1) ===
+[2025-10-12 21:23:50] [INFO] - Fase 1: Analisi fondamentali (CoinGecko)
+[2025-10-12 21:23:50] [ERROR] - Errore nella fase fondamentali: 'dict' object has no attribute 'upper'
+[2025-10-12 21:23:50] [INFO] - Fase 2: Analisi tecnica (Bybit real prices)
+[2025-10-12 21:23:50] [ERROR] - Errore nel fetch_ohlc({'symbol': 'BTCUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:23:50).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'BTCUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:23:50] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'BTCUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:23:50] [ERROR] - Errore nel fetch_ohlc({'symbol': 'ETHUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:23:50).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'ETHUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:23:50] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'ETHUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:23:50] [ERROR] - Errore nel fetch_ohlc({'symbol': 'SOLUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:23:50).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'SOLUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:23:50] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'SOLUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:23:50] [ERROR] - Errore nel fetch_ohlc({'symbol': 'XRPUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:23:50).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'XRPUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:23:50] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'XRPUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:23:51] [ERROR] - Errore nel fetch_ohlc({'symbol': 'DOGEUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:23:51).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'DOGEUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:23:51] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'DOGEUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:23:51] [ERROR] - Errore nel fetch_ohlc({'symbol': 'ADAUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:23:51).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'ADAUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:23:51] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'ADAUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:23:51] [ERROR] - Errore nel fetch_ohlc({'symbol': 'AVAXUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:23:51).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'AVAXUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:23:51] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'AVAXUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:23:51] [ERROR] - Errore nel fetch_ohlc({'symbol': 'LINKUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:23:51).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'LINKUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:23:51] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'LINKUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:23:51] [ERROR] - Errore nel fetch_ohlc({'symbol': 'MATICUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:23:51).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'MATICUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:23:51] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'MATICUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:23:51] [ERROR] - Errore nel fetch_ohlc({'symbol': 'DOTUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:23:51).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'DOTUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:23:51] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'DOTUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:23:51] [INFO] - === ✅ CICLO COMPLETATO (0 segnali salvati) ===
+
+[2025-10-12 21:25:32] [INFO] - --- Avvio Servizio ETL (v7.1 Real Market Sync) ---
+[2025-10-12 21:25:32] [INFO] - === AVVIO CICLO DI ANALISI ETL (v7.1) ===
+[2025-10-12 21:25:32] [INFO] - Fase 1: Analisi fondamentali (CoinGecko)
+[2025-10-12 21:25:32] [ERROR] - Errore nella fase fondamentali: 'dict' object has no attribute 'upper'
+[2025-10-12 21:25:32] [INFO] - Fase 2: Analisi tecnica (Bybit real prices)
+[2025-10-12 21:25:32] [ERROR] - Errore nel fetch_ohlc({'symbol': 'BTCUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:25:32).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'BTCUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:25:32] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'BTCUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:25:33] [ERROR] - Errore nel fetch_ohlc({'symbol': 'ETHUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:25:33).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'ETHUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:25:33] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'ETHUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:25:33] [ERROR] - Errore nel fetch_ohlc({'symbol': 'SOLUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:25:33).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'SOLUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:25:33] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'SOLUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:25:33] [ERROR] - Errore nel fetch_ohlc({'symbol': 'XRPUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:25:33).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'XRPUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:25:33] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'XRPUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:25:33] [ERROR] - Errore nel fetch_ohlc({'symbol': 'DOGEUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:25:33).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'DOGEUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:25:33] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'DOGEUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:25:33] [ERROR] - Errore nel fetch_ohlc({'symbol': 'ADAUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:25:33).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'ADAUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:25:33] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'ADAUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:25:34] [ERROR] - Errore nel fetch_ohlc({'symbol': 'AVAXUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:25:34).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'AVAXUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:25:34] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'AVAXUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:25:34] [ERROR] - Errore nel fetch_ohlc({'symbol': 'LINKUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:25:34).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'LINKUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:25:34] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'LINKUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:25:34] [ERROR] - Errore nel fetch_ohlc({'symbol': 'MATICUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:25:34).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'MATICUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:25:34] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'MATICUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:25:34] [ERROR] - Errore nel fetch_ohlc({'symbol': 'DOTUSDT', 'type': 'crypto', 'source': 'bybit'}USDT): params error: Symbol Is Invalid (ErrCode: 10001) (ErrTime: 19:25:34).
+Request → GET https://api.bybit.com/v5/market/kline: category=linear&interval=60&limit=300&symbol={'symbol': 'DOTUSDT', 'type': 'crypto', 'source': 'bybit'}USDT.
+[2025-10-12 21:25:34] [WARNING] - Nessun dato OHLC trovato per {'symbol': 'DOTUSDT', 'type': 'crypto', 'source': 'bybit'}USDT
+[2025-10-12 21:25:34] [INFO] - === ✅ CICLO COMPLETATO (0 segnali salvati) ===
+
+[2025-10-12 21:29:59] [INFO] - --- Avvio Servizio ETL (Phoenix v7.2 - Real Sync) ---
+[2025-10-12 21:29:59] [INFO] - === AVVIO CICLO DI ANALISI ETL (v7.2) ===
+[2025-10-12 21:29:59] [INFO] - Fase 1: Quality Scoring (bulk request CoinGecko)...
+[2025-10-12 21:29:59] [ERROR] - Errore durante la fase CoinGecko: 'CoinGeckoClient' object has no attribute 'get_crypto_bulk_data'
+[2025-10-12 21:29:59] [INFO] - Fase 2: Analisi Tecniche (Bybit real prices)...
+[2025-10-12 21:29:59] [ERROR] - Errore durante l’analisi tecnica di BTCUSDT: 'BybitClient' object has no attribute 'fetch_ohlc'
+[2025-10-12 21:29:59] [ERROR] - Errore durante l’analisi tecnica di ETHUSDT: 'BybitClient' object has no attribute 'fetch_ohlc'
+[2025-10-12 21:29:59] [ERROR] - Errore durante l’analisi tecnica di SOLUSDT: 'BybitClient' object has no attribute 'fetch_ohlc'
+[2025-10-12 21:29:59] [ERROR] - Errore durante l’analisi tecnica di XRPUSDT: 'BybitClient' object has no attribute 'fetch_ohlc'
+[2025-10-12 21:29:59] [ERROR] - Errore durante l’analisi tecnica di DOGEUSDT: 'BybitClient' object has no attribute 'fetch_ohlc'
+[2025-10-12 21:29:59] [ERROR] - Errore durante l’analisi tecnica di ADAUSDT: 'BybitClient' object has no attribute 'fetch_ohlc'
+[2025-10-12 21:29:59] [ERROR] - Errore durante l’analisi tecnica di AVAXUSDT: 'BybitClient' object has no attribute 'fetch_ohlc'
+[2025-10-12 21:29:59] [ERROR] - Errore durante l’analisi tecnica di LINKUSDT: 'BybitClient' object has no attribute 'fetch_ohlc'
+[2025-10-12 21:29:59] [ERROR] - Errore durante l’analisi tecnica di MATICUSDT: 'BybitClient' object has no attribute 'fetch_ohlc'
+[2025-10-12 21:29:59] [ERROR] - Errore durante l’analisi tecnica di DOTUSDT: 'BybitClient' object has no attribute 'fetch_ohlc'
+[2025-10-12 21:29:59] [INFO] - === ✅ CICLO COMPLETATO (segnali salvati su DB) ===
+[2025-10-12 21:29:59] [INFO] - Attesa di 30 minuti prima del prossimo ciclo...
+
+[2025-10-12 21:32:06] [INFO] - --- Avvio Servizio ETL (Phoenix v7.2 - Real Sync) ---
+[2025-10-12 21:32:06] [INFO] - === AVVIO CICLO DI ANALISI ETL (v7.2) ===
+[2025-10-12 21:32:06] [INFO] - Fase 1: Quality Scoring (bulk request CoinGecko)...
+[2025-10-12 21:32:08] [INFO] - ✅ Dati fondamentali salvati per 10 asset.
+[2025-10-12 21:32:08] [INFO] - Fase 2: Analisi Tecniche (Bybit real prices)...
+[2025-10-12 21:32:08] [INFO] - 📈 Segnale LONG per BTCUSDT | Entry: 114257.10 | TP: 115399.67 | SL: 113114.53
+[2025-10-12 21:32:09] [INFO] - 📈 Segnale LONG per ETHUSDT | Entry: 4134.57 | TP: 4175.92 | SL: 4093.22
+[2025-10-12 21:32:10] [INFO] - 📈 Segnale LONG per SOLUSDT | Entry: 195.64 | TP: 197.60 | SL: 193.68
+[2025-10-12 21:32:11] [INFO] - 📈 Segnale LONG per XRPUSDT | Entry: 2.53 | TP: 2.56 | SL: 2.51
+[2025-10-12 21:32:12] [INFO] - 📈 Segnale LONG per DOGEUSDT | Entry: 0.21 | TP: 0.21 | SL: 0.21
+[2025-10-12 21:32:12] [INFO] - 📈 Segnale LONG per ADAUSDT | Entry: 0.70 | TP: 0.70 | SL: 0.69
+[2025-10-12 21:32:13] [INFO] - 📈 Segnale LONG per AVAXUSDT | Entry: 22.80 | TP: 23.03 | SL: 22.58
+[2025-10-12 21:32:14] [INFO] - 📈 Segnale LONG per LINKUSDT | Entry: 19.26 | TP: 19.45 | SL: 19.07
+[2025-10-12 21:32:15] [WARNING] - Nessun dato OHLC trovato per MATICUSDT
+[2025-10-12 21:32:15] [INFO] - 📈 Segnale LONG per DOTUSDT | Entry: 3.27 | TP: 3.30 | SL: 3.23
+[2025-10-12 21:32:15] [INFO] - === ✅ CICLO COMPLETATO (segnali salvati su DB) ===
+[2025-10-12 21:32:15] [INFO] - Attesa di 30 minuti prima del prossimo ciclo...
+
+[2025-10-12 21:40:04] [INFO] - --- Avvio Servizio ETL (Phoenix v7.2 - Real Sync) ---
+[2025-10-12 21:40:04] [INFO] - === AVVIO CICLO DI ANALISI ETL (v7.2) ===
+[2025-10-12 21:40:04] [INFO] - Fase 1: Quality Scoring (bulk request CoinGecko)...
+[2025-10-12 21:40:06] [INFO] - ✅ Dati fondamentali salvati per 10 asset.
+[2025-10-12 21:40:06] [INFO] - Fase 2: Analisi Tecniche (Bybit real prices)...
+[2025-10-12 21:40:07] [INFO] - 📈 Segnale LONG per BTCUSDT | Entry: 114141.60 | TP: 115283.02 | SL: 113000.18
+[2025-10-12 21:40:08] [INFO] - 📈 Segnale LONG per ETHUSDT | Entry: 4119.06 | TP: 4160.25 | SL: 4077.87
+[2025-10-12 21:40:08] [INFO] - 📈 Segnale LONG per SOLUSDT | Entry: 195.19 | TP: 197.14 | SL: 193.24
+[2025-10-12 21:40:09] [INFO] - 📈 Segnale LONG per XRPUSDT | Entry: 2.53 | TP: 2.55 | SL: 2.50
+[2025-10-12 21:40:10] [INFO] - 📈 Segnale LONG per DOGEUSDT | Entry: 0.21 | TP: 0.21 | SL: 0.21
+[2025-10-12 21:40:11] [INFO] - 📈 Segnale LONG per ADAUSDT | Entry: 0.69 | TP: 0.70 | SL: 0.69
+[2025-10-12 21:40:11] [INFO] - 📈 Segnale LONG per AVAXUSDT | Entry: 22.84 | TP: 23.07 | SL: 22.61
+[2025-10-12 21:40:12] [INFO] - 📈 Segnale LONG per LINKUSDT | Entry: 19.21 | TP: 19.40 | SL: 19.02
+[2025-10-12 21:40:13] [WARNING] - Nessun dato OHLC trovato per MATICUSDT
+[2025-10-12 21:40:14] [INFO] - 📈 Segnale LONG per DOTUSDT | Entry: 3.26 | TP: 3.29 | SL: 3.23
+[2025-10-12 21:40:14] [INFO] - === ✅ CICLO COMPLETATO (segnali salvati su DB) ===
+[2025-10-12 21:40:14] [INFO] - Attesa di 30 minuti prima del prossimo ciclo...
+

@@ -1,139 +1,150 @@
-# backtester.py - v11.0.0 (The Regime-Aware Engine)
-# ----------------------------------------------------------------
-# - IMPLEMENTAZIONE DIRETTIVA CONSIGLIO #8:
-#   Introdotto il "Market Regime Detector" basato sull'indicatore ADX.
-# - La strategia Mean Reversion ora si attiva SOLO se il mercato è
-#   in un regime di "RANGE" (ADX < 25), come suggerito dal Consiglio.
-# - Questo aggiunge un filtro di contesto strategico per evitare di
-#   operare contro trend troppo forti.
-# ----------------------------------------------------------------
-
-from dotenv import load_dotenv
-load_dotenv()
-
+# backtester.py - v7.0 (Fabbrica di Backtest Multi-Simbolo)
 import pandas as pd
 import pandas_ta as ta
-import numpy as np
 import logging
-from tqdm import tqdm
+from datetime import datetime, timezone
+import time
+import numpy as np
 
-from api_clients.data_client import FinancialDataClient
+# Importiamo la lista dei simboli dal nostro servizio ETL
+from etl_service import SYMBOLS, get_klines_as_df
 
-# --- Configurazione ---
-logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
-
-ASSETS_TO_BACKTEST = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT', 'LINKUSDT']
-TIMEFRAME_TO_TEST = 'D'
-DATA_SOURCE = 'bybit'
+# --- CONFIGURAZIONE STRATEGIA "PULLBACK" ---
+START_DATE_STR = "2022-01-01"
+END_DATE_STR = "2023-12-31"
 INITIAL_CAPITAL = 10000
-RISK_PER_TRADE = 0.02
+TRADE_RISK_PERCENT = 0.02
 
-# --- MOTORE STRATEGICO v9.0 con FILTRO DI REGIME ---
-def find_regime_filtered_signals(df, rsi_len=14, rsi_low=30, rsi_high=70,
-                                 vol_ma_len=20, vol_z_min=0.8,
-                                 atr_len=14, sl_atr=1.5, tp_atr=2.0,
-                                 adx_len=14, adx_threshold=25):
-    out = []
-    if df is None or len(df) < 100: return out
+# Parametri della strategia
+EMA_SLOW = 50
+EMA_FAST = 20
+RISK_REWARD_RATIO = 1.5
 
-    # Indicatori
-    df.ta.rsi(length=rsi_len, append=True)
-    df.ta.atr(length=atr_len, append=True)
-    df.ta.adx(length=adx_len, append=True) # Calcolo ADX
+logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
-    rsi_col = f'RSI_{rsi_len}'
-    atr_col = f'ATRr_{atr_len}'
-    adx_col = f'ADX_{adx_len}'
+def load_full_historical_data(symbol, interval, start_str, end_str):
+    # ... (funzione identica) ...
+    logging.info(f"Avvio download dati storici per {symbol}...")
+    start_ts=int(datetime.strptime(start_str, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()*1000)
+    end_ts=int(datetime.strptime(end_str, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()*1000)
+    all_data=pd.DataFrame()
+    while start_ts < end_ts:
+        df=get_klines_as_df(symbol, interval, start_time=start_ts, limit=1000)
+        if df.empty: break
+        all_data=pd.concat([all_data, df])
+        start_ts=int(df.index[-1].timestamp()*1000)+(int(interval)*60*1000)
+        # Non logghiamo più qui per non intasare l'output
+        time.sleep(0.5)
+    all_data=all_data[~all_data.index.duplicated(keep='first')]
+    return all_data.sort_index()
 
-    # Z-score del Volume
-    vol_ma = df['volume'].rolling(vol_ma_len).mean()
-    vol_std = df['volume'].rolling(vol_ma_len).std(ddof=0)
-    df['vol_z'] = ((df['volume'] - vol_ma) / vol_std.replace(0, np.nan)).fillna(0.0)
-
-    # Loop sui dati
-    for i in range(len(df) - 2):
-        T = df.iloc[i]
-        T_plus_1 = df.iloc[i+1]
-        
-        # --- FILTRO DI REGIME ---
-        # Se l'ADX è sopra la soglia, il mercato è in trend. Saltiamo.
-        if T[adx_col] >= adx_threshold:
-            continue
-
-        # Se siamo qui, ADX < 25, quindi il mercato è in RANGE. Procediamo.
-        
-        # Setup LONG
-        if T[rsi_col] <= rsi_low and T['vol_z'] >= vol_z_min:
-            if T_plus_1['close'] > T['high']:
-                entry_price = df.iloc[i+2]['open']; sl = T['low'] - (sl_atr * T[atr_col]); tp = entry_price + (tp_atr * T[atr_col])
-                out.append({'side': 'LONG', 'entry_date': df.index[i+2], 'entry_price': entry_price, 'sl': sl, 'tp': tp})
-
-        # Setup SHORT
-        if T[rsi_col] >= rsi_high and T['vol_z'] >= vol_z_min:
-            if T_plus_1['close'] < T['low']:
-                entry_price = df.iloc[i+2]['open']; sl = T['high'] + (sl_atr * T[atr_col]); tp = entry_price - (tp_atr * T[atr_col])
-                out.append({'side': 'SHORT', 'entry_date': df.index[i+2], 'entry_price': entry_price, 'sl': sl, 'tp': tp})
-    return out
-
-# (Le funzioni di backtest e main rimangono quasi identiche, ma chiamano la nuova funzione di scan)
-def run_backtest_with_reporting(asset_symbol: str) -> (dict, list):
-    data_client = FinancialDataClient()
-    df = data_client.get_klines(asset_symbol, TIMEFRAME_TO_TEST, DATA_SOURCE, limit=1500)
-    if df is None or df.empty: return (None, [])
-    df.sort_index(ascending=True, inplace=True)
+def perform_single_backtest(symbol: str):
+    """Esegue il backtest della strategia Pullback per un singolo simbolo e restituisce i risultati."""
+    logging.info(f"--- INIZIO TEST per {symbol} ---")
     
-    signals = find_regime_filtered_signals(df) # <-- Chiamata alla nuova funzione
+    full_df = load_full_historical_data(symbol, "60", "2021-11-01", END_DATE_STR)
+    if full_df.empty:
+        logging.error(f"Download dati per {symbol} fallito. Salto il test."); return None
+
+    full_df.ta.ema(length=EMA_FAST, append=True)
+    full_df.ta.ema(length=EMA_SLOW, append=True)
+    test_df = full_df[START_DATE_STR:END_DATE_STR].copy()
     
-    if not signals:
-        summary = {'asset': asset_symbol, 'total_trades': 0, 'winning_trades': 0, 'win_rate': 0, 'total_pnl': 0, 'pnl_perc': 0}
-        return (summary, [])
+    capital = INITIAL_CAPITAL
+    trades = []
+    active_trade = None
 
-    executed_trades = []; capital = INITIAL_CAPITAL
-    for signal in signals:
-        trade_risk = capital * RISK_PER_TRADE
-        stop_loss_points = abs(signal['entry_price'] - signal['sl'])
-        size = trade_risk / stop_loss_points if stop_loss_points > 0 else 0
-        if size == 0: continue
-        trade_outcome = {'status': 'OPEN', 'exit_date': None, 'pnl': 0}
-        trade_df = df[df.index > signal['entry_date']]
-        for index, candle in trade_df.iterrows():
-            if signal['side'] == 'LONG':
-                if candle['high'] >= signal['tp']: trade_outcome = {'status': 'TP', 'pnl': (signal['tp'] - signal['entry_price']) * size, 'exit_date': index}; break
-                elif candle['low'] <= signal['sl']: trade_outcome = {'status': 'SL', 'pnl': (signal['sl'] - signal['entry_price']) * size, 'exit_date': index}; break
-            elif signal['side'] == 'SHORT':
-                if candle['low'] <= signal['tp']: trade_outcome = {'status': 'TP', 'pnl': (signal['entry_price'] - signal['tp']) * size, 'exit_date': index}; break
-                elif candle['high'] >= signal['sl']: trade_outcome = {'status': 'SL', 'pnl': (signal['entry_price'] - signal['sl']) * size, 'exit_date': index}; break
-        if trade_outcome['status'] != 'OPEN':
-            capital += trade_outcome['pnl']; trade_details = {'asset': asset_symbol, 'entry_date': signal['entry_date'], 'side': signal['side'], 'entry_price': signal['entry_price'], 'sl': signal['sl'], 'tp': signal['tp'], 'exit_date': trade_outcome['exit_date'], 'status': trade_outcome['status'], 'pnl': trade_outcome['pnl']}; executed_trades.append(trade_details)
+    for i in range(2, len(test_df)):
+        prev_candle = test_df.iloc[i-1]
+        current_candle = test_df.iloc[i]
+        
+        if active_trade:
+            # ... (logica di uscita identica alla v6) ...
+            exit_price = None
+            if active_trade['type'] == 'LONG':
+                if current_candle['low'] <= active_trade['stop_loss']: exit_price = active_trade['stop_loss']
+                elif current_candle['high'] >= active_trade['take_profit']: exit_price = active_trade['take_profit']
+            elif active_trade['type'] == 'SHORT':
+                if current_candle['high'] >= active_trade['stop_loss']: exit_price = active_trade['stop_loss']
+                elif current_candle['low'] <= active_trade['take_profit']: exit_price = active_trade['take_profit']
+            if exit_price:
+                pnl = (exit_price - active_trade['entry_price']) * active_trade['units']
+                if active_trade['type'] == 'SHORT': pnl = -pnl
+                capital += pnl
+                active_trade.update({'pnl': pnl, 'exit_date': current_candle.name})
+                trades.append(active_trade)
+                active_trade = None
+        
+        if not active_trade:
+            # ... (logica di ingresso identica alla v6) ...
+            is_uptrend = prev_candle['close'] > prev_candle[f'EMA_{EMA_SLOW}']
+            is_pullback_long = prev_candle['low'] < prev_candle[f'EMA_{EMA_FAST}']
+            is_reversal_candle_long = current_candle['close'] > current_candle['open']
+            if is_uptrend and is_pullback_long and is_reversal_candle_long:
+                entry_price = current_candle['close']; stop_loss = prev_candle['low']
+                take_profit = entry_price + ((entry_price - stop_loss) * RISK_REWARD_RATIO)
+                risk_per_unit = entry_price - stop_loss
+                risk_amount = capital * TRADE_RISK_PERCENT
+                position_size = risk_amount / risk_per_unit if risk_per_unit > 0 else 0
+                if position_size > 0:
+                    active_trade = {'type': 'LONG', 'entry_date': current_candle.name, 'entry_price': entry_price, 'stop_loss': stop_loss, 'take_profit': take_profit, 'units': position_size}
+            is_downtrend = prev_candle['close'] < prev_candle[f'EMA_{EMA_SLOW}']
+            is_pullback_short = prev_candle['high'] > prev_candle[f'EMA_{EMA_FAST}']
+            is_reversal_candle_short = current_candle['close'] < current_candle['open']
+            if is_downtrend and is_pullback_short and is_reversal_candle_short:
+                entry_price = current_candle['close']; stop_loss = prev_candle['high']
+                take_profit = entry_price - ((stop_loss - entry_price) * RISK_REWARD_RATIO)
+                risk_per_unit = stop_loss - entry_price
+                risk_amount = capital * TRADE_RISK_PERCENT
+                position_size = risk_amount / risk_per_unit if risk_per_unit > 0 else 0
+                if position_size > 0:
+                    active_trade = {'type': 'SHORT', 'entry_date': current_candle.name, 'entry_price': entry_price, 'stop_loss': stop_loss, 'take_profit': take_profit, 'units': position_size}
+    
+    if not trades:
+        logging.warning(f"Nessun trade eseguito per {symbol}."); return None
 
-    total_pnl, win_rate, winning_trades = 0, 0, 0
-    if executed_trades:
-        report_df = pd.DataFrame(executed_trades); total_pnl = report_df['pnl'].sum(); winning_trades = len(report_df[report_df['pnl'] > 0]); win_rate = (winning_trades / len(executed_trades)) * 100 if executed_trades else 0
-    summary = {'asset': asset_symbol, 'total_trades': len(executed_trades), 'winning_trades': winning_trades, 'win_rate': win_rate, 'total_pnl': total_pnl, 'pnl_perc': total_pnl / INITIAL_CAPITAL}
-    return (summary, executed_trades)
+    results_df = pd.DataFrame(trades)
+    total_pnl = results_df['pnl'].sum()
+    win_trades = results_df[results_df['pnl'] > 0]
+    loss_trades = results_df[results_df['pnl'] <= 0]
+    win_rate = (len(win_trades) / len(results_df)) * 100
+    profit_factor = win_trades['pnl'].sum() / abs(loss_trades['pnl'].sum()) if not loss_trades.empty and loss_trades['pnl'].sum() != 0 else float('inf')
+    results_df['capital'] = INITIAL_CAPITAL + results_df['pnl'].cumsum()
+    results_df['peak'] = results_df['capital'].cummax()
+    results_df['drawdown'] = (results_df['capital'] - results_df['peak']) / results_df['peak']
+    max_drawdown = results_df['drawdown'].min() * 100
+    
+    return {
+        "Symbol": symbol,
+        "Performance %": (total_pnl / INITIAL_CAPITAL) * 100,
+        "Profit Factor": profit_factor,
+        "Win Rate %": win_rate,
+        "N. Trade": len(results_df),
+        "Max Drawdown %": max_drawdown
+    }
 
-def main():
-    logging.info(f"--- Avvio Backtest di Portafoglio (Direttiva Consiglio #8: The Regime-Aware Engine) ---")
-    all_summaries = []; all_trades = []
-    for asset in tqdm(ASSETS_TO_BACKTEST, desc="Analisi Regime-Aware"):
-        summary, trades = run_backtest_with_reporting(asset)
-        if summary: all_summaries.append(summary)
-        if trades: all_trades.extend(trades)
-            
-    summary_df = pd.DataFrame(all_summaries)
-    print("\n" + "="*80); print("--- REPORT DI RIEPILOGO DEL PORTAFOGLIO (DIRETTIVA CONSIGLIO #8) ---"); print(f"Timeframe: {TIMEFRAME_TO_TEST} | Strategia: Mean Reversion con Filtro di Regime (ADX < 25)"); print("="*80)
-    if not summary_df.empty:
-        summary_df['pnl_perc'] = summary_df['pnl_perc'].map('{:.2%}'.format)
-        summary_df['win_rate'] = summary_df['win_rate'].map('{:.2f}%'.format)
-        summary_df['total_pnl'] = summary_df['total_pnl'].map('${:,.2f}'.format)
-        print(summary_df[['asset', 'total_trades', 'winning_trades', 'win_rate', 'total_pnl', 'pnl_perc']].to_string(index=False))
-    else: print("Nessun riepilogo da visualizzare.")
-    print("="*80)
+def run_all_backtests():
+    """Esegue il backtest su tutti i simboli e stampa un report riassuntivo."""
+    all_results = []
+    
+    for symbol in SYMBOLS:
+        result = perform_single_backtest(symbol)
+        if result:
+            all_results.append(result)
+    
+    if not all_results:
+        logging.error("Nessun backtest completato con successo.")
+        return
 
-    if all_trades:
-        trades_df = pd.DataFrame(all_trades); trades_df.to_csv("regime_filtered_trades_report.csv", index=False)
-        logging.info("Report dettagliato dei trade (filtrato per regime) salvato in 'regime_filtered_trades_report.csv'.")
-    else: logging.info("Nessun trade eseguito con il filtro di regime. Il report dettagliato non è stato creato.")
+    summary_df = pd.DataFrame(all_results)
+    summary_df = summary_df.round(2) # Arrotonda tutti i valori a 2 decimali
+    summary_df = summary_df.sort_values(by="Profit Factor", ascending=False)
+    
+    print("\n" + "="*70)
+    print(" " * 15 + "RIEPILOGO BACKTEST: OPERAZIONE PULLBACK")
+    print("="*70)
+    print(summary_df.to_markdown(index=False))
+    print("="*70 + "\n")
 
 if __name__ == "__main__":
-    main()
+    run_all_backtests()

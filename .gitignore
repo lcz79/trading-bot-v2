@@ -1,19 +1,16 @@
-# Ambienti virtuali
+# Ambiente virtuale
 venv/
-.env
 
-# File di cache
+# File di database
+*.db
+*.db-journal
+
+# Cache di Python
 __pycache__/
 *.pyc
-*.pyo
-*.log
 
-# Database locali
-*.db
-phoenix_trading.db
-
-# File di sistema
+# File specifici del sistema operativo
 .DS_Store
 
-# Streamlit cache
-.streamlit/
+# File di configurazione delle strategie ottimali (può essere rigenerato)
+optimal_strategies.json

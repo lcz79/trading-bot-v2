@@ -1,100 +1,81 @@
-# database.py - (Phoenix Patch v7.1 Applied)
-# Aggiunta la tabella TechnicalSignal e Fundamentals per i dati CoinGecko.
+# database.py - v3.1 (con filtro anti-duplicati)
+import sqlite3
+import logging
+from datetime import datetime, timezone, timedelta
 
-import os
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, inspect, func, Numeric
-from sqlalchemy.orm import sessionmaker, declarative_base
-from contextlib import contextmanager
-from datetime import datetime
-
-# --- Base ORM ---
-Base = declarative_base()
-
-# --- Tabelle Trading Core ---
-class TradeIntent(Base):
-    __tablename__ = 'trade_intents'
-    id = Column(Integer, primary_key=True)
-    symbol = Column(String, nullable=False)
-    direction = Column(String, nullable=False)
-    entry_price = Column(Float)
-    take_profit = Column(Float)
-    stop_loss = Column(Float)
-    score = Column(Integer)
-    status = Column(String, default='NEW')
-    timestamp = Column(DateTime, default=datetime.utcnow)
-
-
-class OpenPosition(Base):
-    __tablename__ = 'open_positions'
-    id = Column(Integer, primary_key=True)
-    symbol = Column(String, nullable=False)
-    direction = Column(String, nullable=False)
-    entry_price = Column(Float, nullable=False)
-    size = Column(Float, nullable=False)
-    take_profit = Column(Float)
-    stop_loss = Column(Float)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-
-
-class TradeHistory(Base):
-    __tablename__ = 'trade_history'
-    id = Column(Integer, primary_key=True)
-    symbol = Column(String, nullable=False)
-    direction = Column(String, nullable=False)
-    entry_price = Column(Float, nullable=False)
-    exit_price = Column(Float, nullable=False)
-    pnl = Column(Float, nullable=False)
-    status = Column(String)  # 'TP', 'SL', 'MANUAL'
-    timestamp = Column(DateTime, default=datetime.utcnow)
-
-
-# --- Tabella Segnali Tecnici ---
-class TechnicalSignal(Base):
-    __tablename__ = 'technical_signals'
-    id = Column(Integer, primary_key=True)
-    asset = Column(String(20), nullable=False)
-    timeframe = Column(String(10), nullable=False)
-    strategy = Column(String(50))
-    signal = Column(String(100))
-    entry_price = Column(Numeric(20, 8))
-    stop_loss = Column(Numeric(20, 8), nullable=True)
-    take_profit = Column(Numeric(20, 8), nullable=True)
-    details = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-
-# --- Tabella Dati Fondamentali CoinGecko ---
-class FundamentalAsset(Base):
-    __tablename__ = 'fundamentals'
-    id = Column(Integer, primary_key=True)
-    symbol = Column(String(20), nullable=False)
-    coin_id = Column(String(50), nullable=False)
-    name = Column(String(100))
-    market_cap = Column(Float)
-    volume_24h = Column(Float)
-    price = Column(Float)
-    change_24h = Column(Float)
-    rank = Column(Integer)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-
-
-# --- Engine e Gestione Sessione ---
-DATABASE_URL = "sqlite:///phoenix_trading.db"
-engine = create_engine(DATABASE_URL)
-Session = sessionmaker(bind=engine)
+DB_FILE = "trading_signals.db"
 
 def init_db():
-    Base.metadata.create_all(engine)
-
-@contextmanager
-def session_scope():
-    session = Session()
+    # ... (il codice di init_db rimane identico) ...
     try:
-        yield session
-        session.commit()
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS signals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME NOT NULL,
+            symbol TEXT NOT NULL,
+            signal_type TEXT NOT NULL,
+            timeframe TEXT,
+            strategy TEXT,
+            score REAL,
+            details TEXT,
+            entry_price REAL,
+            stop_loss REAL,
+            take_profit REAL
+        )
+        """)
+        for col in ["entry_price", "stop_loss", "take_profit"]:
+            try: cursor.execute(f"ALTER TABLE signals ADD COLUMN {col} REAL")
+            except sqlite3.OperationalError: pass
+        conn.commit()
+        conn.close()
+        logging.info("Database inizializzato con successo.")
     except Exception as e:
-        session.rollback()
-        print(f"Errore di sessione: {e}")
-        raise
-    finally:
-        session.close()
+        logging.error(f"Errore durante l'inizializzazione del database: {e}")
+
+
+# --- NUOVA FUNZIONE DI CONTROLLO ---
+def check_recent_signal(symbol: str, signal_type: str, minutes: int = 120) -> bool:
+    """
+    Controlla se un segnale dello stesso tipo per lo stesso simbolo
+    è stato già registrato negli ultimi 'minutes' minuti.
+    Restituisce True se esiste un segnale recente, False altrimenti.
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        time_threshold = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+        
+        query = """
+        SELECT COUNT(*) FROM signals 
+        WHERE symbol = ? AND signal_type = ? AND timestamp >= ?
+        """
+        
+        cursor.execute(query, (symbol, signal_type, time_threshold))
+        count = cursor.fetchone()[0]
+        
+        conn.close()
+        return count > 0
+    except Exception as e:
+        logging.error(f"Errore durante il controllo dei segnali recenti: {e}")
+        return False # In caso di errore, meglio permettere il salvataggio
+
+def save_signal(signal_data: dict):
+    # ... (il codice di save_signal rimane identico) ...
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        query = """
+        INSERT INTO signals (timestamp, symbol, signal_type, timeframe, strategy, score, details, entry_price, stop_loss, take_profit)
+        VALUES (:timestamp, :symbol, :signal_type, :timeframe, :strategy, :score, :details, :entry_price, :stop_loss, :take_profit)
+        """
+        for key in ['entry_price', 'stop_loss', 'take_profit']:
+            signal_data.setdefault(key, None)
+        cursor.execute(query, signal_data)
+        conn.commit()
+        conn.close()
+        logging.info(f"Segnale per {signal_data['symbol']} salvato nel database.")
+    except Exception as e:
+        logging.error(f"Errore durante il salvataggio del segnale: {e}")
