@@ -1,16 +1,15 @@
-# database.py - v3.1 (con filtro anti-duplicati)
+# database.py - v3.1 (Versione Completa e Corretta)
 import sqlite3
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
-DB_FILE = "trading_signals.db"
+DB_NAME = 'trading_signals.db'
 
 def init_db():
-    # ... (il codice di init_db rimane identico) ...
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        cursor.execute("""
+    """Crea la tabella dei segnali se non esiste."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS signals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp DATETIME NOT NULL,
@@ -24,58 +23,60 @@ def init_db():
             stop_loss REAL,
             take_profit REAL
         )
-        """)
-        for col in ["entry_price", "stop_loss", "take_profit"]:
-            try: cursor.execute(f"ALTER TABLE signals ADD COLUMN {col} REAL")
-            except sqlite3.OperationalError: pass
-        conn.commit()
-        conn.close()
-        logging.info("Database inizializzato con successo.")
-    except Exception as e:
-        logging.error(f"Errore durante l'inizializzazione del database: {e}")
+    ''')
+    conn.commit()
+    conn.close()
 
-
-# --- NUOVA FUNZIONE DI CONTROLLO ---
-def check_recent_signal(symbol: str, signal_type: str, minutes: int = 120) -> bool:
-    """
-    Controlla se un segnale dello stesso tipo per lo stesso simbolo
-    è stato già registrato negli ultimi 'minutes' minuti.
-    Restituisce True se esiste un segnale recente, False altrimenti.
-    """
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        
-        time_threshold = datetime.now(timezone.utc) - timedelta(minutes=minutes)
-        
-        query = """
-        SELECT COUNT(*) FROM signals 
-        WHERE symbol = ? AND signal_type = ? AND timestamp >= ?
-        """
-        
-        cursor.execute(query, (symbol, signal_type, time_threshold))
-        count = cursor.fetchone()[0]
-        
-        conn.close()
-        return count > 0
-    except Exception as e:
-        logging.error(f"Errore durante il controllo dei segnali recenti: {e}")
-        return False # In caso di errore, meglio permettere il salvataggio
-
-def save_signal(signal_data: dict):
-    # ... (il codice di save_signal rimane identico) ...
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        query = """
+def save_signal(signal_data):
+    """Salva un singolo segnale nel database."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('''
         INSERT INTO signals (timestamp, symbol, signal_type, timeframe, strategy, score, details, entry_price, stop_loss, take_profit)
         VALUES (:timestamp, :symbol, :signal_type, :timeframe, :strategy, :score, :details, :entry_price, :stop_loss, :take_profit)
-        """
-        for key in ['entry_price', 'stop_loss', 'take_profit']:
-            signal_data.setdefault(key, None)
-        cursor.execute(query, signal_data)
+    ''', signal_data)
+    conn.commit()
+    conn.close()
+    logging.info(f"Salvataggio segnale per {signal_data['symbol']} nel database.")
+
+def get_all_signals():
+    """Recupera tutti i segnali dal database per la dashboard."""
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM signals ORDER BY timestamp DESC')
+    signals = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return signals
+
+def check_recent_signal(symbol, signal_type):
+    """Controlla se un segnale identico è già stato salvato nelle ultime 6 ore."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    time_window = datetime.now(timezone.utc) - timedelta(hours=6)
+    cursor.execute('''
+        SELECT 1 FROM signals 
+        WHERE symbol = ? AND signal_type = ? AND timestamp > ?
+        LIMIT 1
+    ''', (symbol, signal_type, time_window))
+    exists = cursor.fetchone()
+    conn.close()
+    return exists is not None
+
+def delete_all_signals():
+    """Cancella tutti i segnali dal database."""
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM signals')
+        cursor.execute('DELETE FROM sqlite_sequence WHERE name="signals"')
         conn.commit()
         conn.close()
-        logging.info(f"Segnale per {signal_data['symbol']} salvato nel database.")
-    except Exception as e:
-        logging.error(f"Errore durante il salvataggio del segnale: {e}")
+        logging.info("Tutti i segnali sono stati cancellati dal database.")
+        return True
+    except sqlite3.Error as e:
+        logging.error(f"Errore durante la cancellazione dei segnali: {e}")
+        return False
+
+# Inizializza il DB all'importazione del modulo, per sicurezza
+init_db()
