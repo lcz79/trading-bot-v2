@@ -1,5 +1,4 @@
-
-# analysis/market_analysis.py - v11.1 (Multi-Asset Pullback w/ Volatility & Structure)
+# analysis/market_analysis.py - v11.2 (Fix per nome colonna ATR)
 import pandas as pd
 import pandas_ta as ta
 import logging
@@ -29,7 +28,11 @@ def run_pullback_analysis(symbol: str, data_1h: pd.DataFrame, params: dict):
     df = data_1h.copy()
     df.ta.ema(length=ema_fast, append=True)
     df.ta.ema(length=ema_slow, append=True)
-    df.ta.atr(length=atr_len, append=True)
+    
+    # --- MODIFICA CHIAVE ---
+    # Forziamo il nome della colonna per essere sicuri al 100%
+    df.ta.atr(length=atr_len, col_names=f'ATR_{atr_len}', append=True)
+    
     df['EMA_SLOW_SLOPE'] = df[f'EMA_{ema_slow}'].diff()
 
     current = df.iloc[-1]
@@ -39,7 +42,13 @@ def run_pullback_analysis(symbol: str, data_1h: pd.DataFrame, params: dict):
     is_uptrend   = (prev['close'] > prev[f'EMA_{ema_slow}']) and (df.iloc[-2]['EMA_SLOW_SLOPE'] > ema_slope_min)
     is_downtrend = (prev['close'] < prev[f'EMA_{ema_slow}']) and (df.iloc[-2]['EMA_SLOW_SLOPE'] < -ema_slope_min)
 
-    atr_prev = prev['ATR_'+str(atr_len)]
+    # Ora siamo sicuri che la colonna si chiami esattamente 'ATR_14' (o qualsiasi sia atr_len)
+    atr_col_name = f'ATR_{atr_len}'
+    if atr_col_name not in prev.index:
+        logging.error(f"La colonna ATR '{atr_col_name}' non è stata creata per {symbol}.")
+        return None
+        
+    atr_prev = prev[atr_col_name]
     if pd.isna(atr_prev) or atr_prev == 0:
         logging.info(f"ATR non disponibile per {symbol}.")
         return None
@@ -145,7 +154,7 @@ def run_pullback_analysis(symbol: str, data_1h: pd.DataFrame, params: dict):
 
         db.save_signal(info)
         logging.info(f"✅ SEGNALE {final_signal} {symbol} a {entry_price} | SL {stop_loss} | TP {take_profit}")
-        return info # Restituisce il segnale per lo scanner
+        return info
     
     logging.info(f"Nessuna opportunità valida (filtri/validazioni) per {symbol}.")
     return None
