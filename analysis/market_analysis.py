@@ -1,147 +1,125 @@
-# analysis/market_analysis.py - v12.0 (Refactoring per Backtesting)
+# analysis/market_analysis.py - v13.0 (Filtri di Qualità per i Segnali)
 import pandas as pd
 import pandas_ta as ta
 import logging
-from datetime import datetime, timezone
 import json
 
 import database as db
 
 def find_pullback_signal(symbol: str, data_1h: pd.DataFrame, params: dict):
     """
-    Funzione core che analizza i dati e restituisce un dizionario con i dettagli del segnale,
-    o None se non viene trovata alcuna opportunità. NON ha effetti collaterali (non salva su DB).
+    Funzione core v13.0. Analizza i dati con filtri di qualità migliorati.
+    1. Cerca un pullback "qualificato" (rottura della EMA veloce).
+    2. Attende una candela di "conferma" del momentum.
     """
     ema_slow = params.get('ema_slow', 200)
     ema_fast = params.get('ema_fast', 20)
-    rr_ratio = params.get('rr_ratio', 2.0)
-    ema_slope_min= params.get('ema_slope_min', 0.0)
     atr_len = params.get('atr_len', 14)
-    atr_mult_sl = params.get('atr_mult_sl', 1.2)
-    atr_mult_tp = params.get('atr_mult_tp', None)
-    use_stop_entry = params.get('use_stop_entry', True)
-    partial_take = params.get('partial_take', True)
-    trail_type = params.get('trail_type', 'atr')
-    trail_atr_mult = params.get('trail_atr_mult', 1.0)
-    setup_timeout_bars = params.get('setup_timeout_bars', 3)
+    ema_slope_min = params.get('ema_slope_min', 0.0)
     
     atr_col_name = f'ATR_{atr_len}'
 
-    if len(data_1h) < max(ema_slow, atr_len) + 5:
+    if len(data_1h) < max(ema_slow, atr_len) + 10:
         return None
 
     df = data_1h.copy()
-    df.ta.ema(length=ema_fast, append=True)
-    df.ta.ema(length=ema_slow, append=True)
+    df.ta.ema(length=ema_fast, append=True, col_names=f'EMA_{ema_fast}')
+    df.ta.ema(length=ema_slow, append=True, col_names=f'EMA_{ema_slow}')
     df.ta.atr(length=atr_len, col_names=atr_col_name, append=True)
     df['EMA_SLOW_SLOPE'] = df[f'EMA_{ema_slow}'].diff()
 
-    current = df.iloc[-1]
-    prev    = df.iloc[-2]
-    prev2   = df.iloc[-3]
+    # Usiamo le ultime 3 candele per la nostra logica
+    # setup_candle: la candela che fa il pullback
+    # confirmation_candle: la candela che conferma la ripartenza
+    # current_candle: la candela attuale, non la usiamo per l'analisi ma per il timestamp
+    setup_candle = df.iloc[-3]
+    confirmation_candle = df.iloc[-2]
+    current_candle = df.iloc[-1]
 
-    is_uptrend   = (prev['close'] > prev[f'EMA_{ema_slow}']) and (prev['EMA_SLOW_SLOPE'] > ema_slope_min)
-    is_downtrend = (prev['close'] < prev[f'EMA_{ema_slow}']) and (prev['EMA_SLOW_SLOPE'] < -ema_slope_min)
+    # --- Controlli di base ---
+    if any(pd.isna(c[atr_col_name]) for c in [setup_candle, confirmation_candle]): return None
+    if any(c[atr_col_name] == 0 for c in [setup_candle, confirmation_candle]): return None
 
-    if atr_col_name not in prev.index or pd.isna(prev[atr_col_name]) or prev[atr_col_name] == 0:
-        return None
-        
-    atr_prev = prev[atr_col_name]
-    is_pullback_to_buy  = (prev['low'] <= prev[f'EMA_{ema_fast}']) and ((prev['high'] - prev['low']) >= 0.6 * atr_prev)
-    is_pullback_to_sell = (prev['high'] >= prev[f'EMA_{ema_fast}']) and ((prev['high'] - prev['low']) >= 0.6 * atr_prev)
+    # --- Definizione del Trend ---
+    is_uptrend = (setup_candle[f'EMA_{ema_slow}'] > df.iloc[-10][f'EMA_{ema_slow}']) and (setup_candle['EMA_SLOW_SLOPE'] > ema_slope_min)
+    is_downtrend = (setup_candle[f'EMA_{ema_slow}'] < df.iloc[-10][f'EMA_{ema_slow}']) and (setup_candle['EMA_SLOW_SLOPE'] < -ema_slope_min)
 
     final_signal, entry_price, stop_loss, take_profit = None, None, None, None
-    details = []
 
-    if is_uptrend and is_pullback_to_buy:
-        entry_price, stop_loss, take_profit = calculate_long_trade(current, prev, prev2, atr_prev, params)
-        if entry_price: final_signal = "LONG"
+    # --- Logica per Segnale LONG ---
+    if is_uptrend:
+        # 1. Filtro Pullback Qualificato: la candela di setup deve chiudere sotto la EMA veloce
+        is_qualified_pullback = setup_candle['close'] < setup_candle[f'EMA_{ema_fast}']
+        # 2. Filtro Conferma Momentum: la candela successiva deve essere verde e rompere il massimo del pullback
+        is_momentum_confirmed = confirmation_candle['close'] > confirmation_candle['open'] and \
+                                confirmation_candle['high'] > setup_candle['high']
 
-    elif is_downtrend and is_pullback_to_sell:
-        entry_price, stop_loss, take_profit = calculate_short_trade(current, prev, prev2, atr_prev, params)
-        if entry_price: final_signal = "SHORT"
+        if is_qualified_pullback and is_momentum_confirmed:
+            entry_price, stop_loss, take_profit = calculate_long_trade(confirmation_candle, setup_candle, params)
+            if entry_price: final_signal = "LONG"
+
+    # --- Logica per Segnale SHORT ---
+    elif is_downtrend:
+        # 1. Filtro Pullback Qualificato: la candela di setup deve chiudere sopra la EMA veloce
+        is_qualified_pullback = setup_candle['close'] > setup_candle[f'EMA_{ema_fast}']
+        # 2. Filtro Conferma Momentum: la candela successiva deve essere rossa e rompere il minimo del pullback
+        is_momentum_confirmed = confirmation_candle['close'] < confirmation_candle['open'] and \
+                                confirmation_candle['low'] < setup_candle['low']
+
+        if is_qualified_pullback and is_momentum_confirmed:
+            entry_price, stop_loss, take_profit = calculate_short_trade(confirmation_candle, setup_candle, params)
+            if entry_price: final_signal = "SHORT"
 
     if final_signal:
-        mgmt_data = {
-            "partial_take": partial_take, "partial_at_R": 1.0, "move_to_be_at_R": 1.0,
-            "trail_type": trail_type, "trail_atr_mult": trail_atr_mult, "setup_timeout_bars": setup_timeout_bars
-        }
+        mgmt_data = { "partial_take": params.get('partial_take', True), "trail_type": params.get('trail_type', 'atr') }
         return {
-            "timestamp": current['timestamp'], "symbol": symbol, "signal_type": final_signal,
+            "timestamp": current_candle['timestamp'], "symbol": symbol, "signal_type": final_signal,
             "entry_price": round(entry_price, 6), "stop_loss": round(stop_loss, 6), "take_profit": round(take_profit, 6),
-            "mgmt_details": json.dumps(mgmt_data),
-            "strategy": "Optimized Pullback v11"
+            "mgmt_details": json.dumps(mgmt_data), "strategy": "Optimized Pullback v13"
         }
     return None
 
-def calculate_long_trade(current, prev, prev2, atr_prev, params):
-    use_stop_entry = params.get('use_stop_entry', True)
+def calculate_long_trade(confirmation_candle, setup_candle, params):
+    atr_mult_sl = params.get('atr_mult_sl', 1.5) # Aumentiamo un po' lo spazio per respirare
     rr_ratio = params.get('rr_ratio', 2.0)
-    atr_mult_sl = params.get('atr_mult_sl', 1.2)
-    atr_mult_tp = params.get('atr_mult_tp', None)
+    atr_len = params.get('atr_len', 14)
+    atr_col_name = f'ATR_{atr_len}'
 
-    entry_price = None
-    if use_stop_entry:
-        entry_price = float(prev['high'])
-    elif current['close'] > current['open']:
-        entry_price = float(current['close'])
+    entry_price = confirmation_candle['high']
+    stop_loss = setup_candle['low'] - (confirmation_candle[atr_col_name] * (atr_mult_sl - 1.0))
     
-    if not entry_price: return None, None, None
-
-    long_sl_candidate = min(prev['low'], prev2['low'])
-    stop_loss = long_sl_candidate - atr_mult_sl * atr_prev
     if stop_loss >= entry_price: return None, None, None
-
+    
     risk = entry_price - stop_loss
-    if atr_mult_tp is not None:
-        take_profit = entry_price + atr_mult_tp * atr_prev
-    else:
-        take_profit = entry_price + rr_ratio * risk
+    take_profit = entry_price + (risk * rr_ratio)
         
     return entry_price, stop_loss, take_profit
 
-def calculate_short_trade(current, prev, prev2, atr_prev, params):
-    use_stop_entry = params.get('use_stop_entry', True)
+def calculate_short_trade(confirmation_candle, setup_candle, params):
+    atr_mult_sl = params.get('atr_mult_sl', 1.5)
     rr_ratio = params.get('rr_ratio', 2.0)
-    atr_mult_sl = params.get('atr_mult_sl', 1.2)
-    atr_mult_tp = params.get('atr_mult_tp', None)
+    atr_len = params.get('atr_len', 14)
+    atr_col_name = f'ATR_{atr_len}'
 
-    entry_price = None
-    if use_stop_entry:
-        entry_price = float(prev['low'])
-    elif current['close'] < current['open']:
-        entry_price = float(current['close'])
-
-    if not entry_price: return None, None, None
-
-    short_sl_candidate = max(prev['high'], prev2['high'])
-    stop_loss = short_sl_candidate + atr_mult_sl * atr_prev
+    entry_price = confirmation_candle['low']
+    stop_loss = setup_candle['high'] + (confirmation_candle[atr_col_name] * (atr_mult_sl - 1.0))
+    
     if stop_loss <= entry_price: return None, None, None
 
     risk = stop_loss - entry_price
-    if atr_mult_tp is not None:
-        take_profit = entry_price - atr_mult_tp * atr_prev
-    else:
-        take_profit = entry_price - rr_ratio * risk
+    take_profit = entry_price - (risk * rr_ratio)
         
     return entry_price, stop_loss, take_profit
 
-
 def run_pullback_analysis(symbol: str, data_1h: pd.DataFrame, params: dict):
-    """
-    Wrapper che usa find_pullback_signal e salva il risultato sul DB.
-    Usato dal bot live (etl_service).
-    """
+    """ Wrapper per il bot live. """
     info = find_pullback_signal(symbol, data_1h, params)
-    
     if info:
         if db.check_recent_signal(symbol, info['signal_type']):
-            logging.info(f"Segnale per {symbol} ({info['signal_type']}) già registrato di recente. Salto.")
+            logging.info(f"Segnale per {symbol} ({info['signal_type']}) già registrato. Salto.")
             return None
-
         db.save_signal(info)
         logging.info(f"✅ SEGNALE {info['signal_type']} {info['symbol']} a {info['entry_price']} | SL {info['stop_loss']} | TP {info['take_profit']}")
         return info
-    
     logging.info(f"Nessuna opportunità valida (filtri/validazioni) per {symbol}.")
     return None

@@ -1,145 +1,157 @@
-# optimizer.py - v1.0 (Trova la strategia ottimale per ogni asset)
+# optimizer.py - v2.0 (Professional Grade)
 import pandas as pd
-import pandas_ta as ta
 import logging
-import time
 import json
-from itertools import product
+import itertools
+from datetime import datetime
+import warnings
 
-# Importiamo la lista dei simboli e la funzione di download
-from etl_service import SYMBOLS, get_klines_as_df
+# Ignora avvisi non critici di pandas che possono sporcare l'output
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# --- CONFIGURAZIONE OTTIMIZZATORE ---
-START_DATE_STR = "2022-01-01"
-END_DATE_STR = "2023-12-31"
-INITIAL_CAPITAL = 10000
-TRADE_RISK_PERCENT = 0.02
-OUTPUT_FILE = "optimal_strategies.json"
+from data_sources import binance_client
+from analysis.market_analysis import find_pullback_signal
 
-# --- POOL GENETICO (PARAMETRI DA TESTARE) ---
-EMA_SLOW_OPTIONS = [50, 100, 200]
-EMA_FAST_OPTIONS = [10, 20] # Ridotto per velocizzare i test
-RR_RATIO_OPTIONS = [1.5, 2.0, 2.5]
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
-logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
-
-def run_single_optimization(symbol: str, data: pd.DataFrame, params: dict):
-    """Esegue un singolo backtest con un set di parametri specifico."""
-    ema_slow, ema_fast, rr_ratio = params['ema_slow'], params['ema_fast'], params['rr_ratio']
-    
-    df = data.copy()
-    df.ta.ema(length=ema_fast, append=True)
-    df.ta.ema(length=ema_slow, append=True)
-    
-    capital = INITIAL_CAPITAL
+def run_single_backtest(df_full, params):
+    """Esegue un backtest leggero e restituisce metriche di performance avanzate."""
     trades = []
     active_trade = None
+    start_index = max(params.get('ema_slow', 200), params.get('atr_len', 14)) + 10
+    
+    # Storico del capitale per calcolo drawdown
+    equity_curve = [1.0] 
+    current_equity = 1.0
 
-    for i in range(2, len(df)):
-        prev_candle = df.iloc[i-1]
-        current_candle = df.iloc[i]
+    for i in range(start_index, len(df_full)):
+        current_market_data = df_full.iloc[0:i]
         
         if active_trade:
-            # ... (logica di uscita identica ai backtest precedenti) ...
+            current_candle = current_market_data.iloc[-1]
+            result = None
             exit_price = None
+
             if active_trade['type'] == 'LONG':
-                if current_candle['low'] <= active_trade['stop_loss']: exit_price = active_trade['stop_loss']
-                elif current_candle['high'] >= active_trade['take_profit']: exit_price = active_trade['take_profit']
+                if current_candle['low'] <= active_trade['sl']:
+                    result, exit_price = 'SL', active_trade['sl']
+                elif current_candle['high'] >= active_trade['tp']:
+                    result, exit_price = 'TP', active_trade['tp']
             elif active_trade['type'] == 'SHORT':
-                if current_candle['high'] >= active_trade['stop_loss']: exit_price = active_trade['stop_loss']
-                elif current_candle['low'] <= active_trade['take_profit']: exit_price = active_trade['take_profit']
-            if exit_price:
-                pnl = (exit_price - active_trade['entry_price']) * active_trade['units']
-                if active_trade['type'] == 'SHORT': pnl = -pnl
-                capital += pnl
-                active_trade.update({'pnl': pnl})
+                if current_candle['high'] >= active_trade['sl']:
+                    result, exit_price = 'SL', active_trade['sl']
+                elif current_candle['low'] <= active_trade['tp']:
+                    result, exit_price = 'TP', active_trade['tp']
+            
+            if result:
+                pnl_percent = (exit_price - active_trade['entry_price']) / active_trade['entry_price']
+                if active_trade['type'] == 'SHORT': pnl_percent = -pnl_percent
+                
+                current_equity *= (1 + pnl_percent)
+                equity_curve.append(current_equity)
+                
+                active_trade['result'] = result
                 trades.append(active_trade)
                 active_trade = None
-        
+
         if not active_trade:
-            # ... (logica di ingresso identica ai backtest precedenti) ...
-            is_uptrend = prev_candle['close'] > prev_candle[f'EMA_{ema_slow}']
-            is_pullback_long = prev_candle['low'] < prev_candle[f'EMA_{ema_fast}']
-            is_reversal_candle_long = current_candle['close'] > current_candle['open']
-            if is_uptrend and is_pullback_long and is_reversal_candle_long:
-                entry_price = current_candle['close']; stop_loss = prev_candle['low']
-                take_profit = entry_price + ((entry_price - stop_loss) * rr_ratio)
-                risk_per_unit = entry_price - stop_loss
-                position_size = (capital * TRADE_RISK_PERCENT) / risk_per_unit if risk_per_unit > 0 else 0
-                if position_size > 0: active_trade = {'type': 'LONG', 'entry_price': entry_price, 'stop_loss': stop_loss, 'take_profit': take_profit, 'units': position_size}
-            
-            is_downtrend = prev_candle['close'] < prev_candle[f'EMA_{ema_slow}']
-            is_pullback_short = prev_candle['high'] > prev_candle[f'EMA_{ema_fast}']
-            is_reversal_candle_short = current_candle['close'] < current_candle['open']
-            if is_downtrend and is_pullback_short and is_reversal_candle_short:
-                entry_price = current_candle['close']; stop_loss = prev_candle['high']
-                take_profit = entry_price - ((stop_loss - entry_price) * rr_ratio)
-                risk_per_unit = stop_loss - entry_price
-                position_size = (capital * TRADE_RISK_PERCENT) / risk_per_unit if risk_per_unit > 0 else 0
-                if position_size > 0: active_trade = {'type': 'SHORT', 'entry_price': entry_price, 'stop_loss': stop_loss, 'take_profit': take_profit, 'units': position_size}
+            signal = find_pullback_signal("OPTIMIZER", current_market_data, params)
+            if signal:
+                active_trade = {
+                    'type': signal['signal_type'], 'entry_price': signal['entry_price'],
+                    'sl': signal['stop_loss'], 'tp': signal['take_profit']
+                }
 
-    if not trades: return 0.0
+    if not trades:
+        return {"profit_factor": 0, "max_drawdown": 100, "gross_pl": 0, "total_trades": 0}
 
-    results_df = pd.DataFrame(trades)
-    win_trades = results_df[results_df['pnl'] > 0]
-    loss_trades = results_df[results_df['pnl'] <= 0]
-    profit_factor = win_trades['pnl'].sum() / abs(loss_trades['pnl'].sum()) if not loss_trades.empty and loss_trades['pnl'].sum() != 0 else 0.0
-    return profit_factor
-
-def main():
-    logging.info("--- AVVIO OTTIMIZZATORE DI STRATEGIE ---")
+    gross_profit = sum(abs(t['tp'] - t['entry_price']) for t in trades if t['result'] == 'TP')
+    gross_loss = sum(abs(t['sl'] - t['entry_price']) for t in trades if t['result'] == 'SL')
     
-    # Crea tutte le combinazioni di parametri
-    param_combinations = list(product(EMA_SLOW_OPTIONS, EMA_FAST_OPTIONS, RR_RATIO_OPTIONS))
-    logging.info(f"Test per {len(param_combinations)} combinazioni di parametri per ogni simbolo.")
+    profit_factor = gross_profit / gross_loss if gross_loss > 0 else float('inf')
     
-    optimal_strategies = {}
+    # Calcolo Max Drawdown
+    peak = 1.0
+    max_drawdown = 0
+    for equity in equity_curve:
+        if equity > peak:
+            peak = equity
+        drawdown = (peak - equity) / peak
+        if drawdown > max_drawdown:
+            max_drawdown = drawdown
 
-    for symbol in SYMBOLS:
-        logging.info(f"--- Ottimizzazione per {symbol} ---")
+    return {
+        "profit_factor": round(profit_factor, 2),
+        "max_drawdown": round(max_drawdown * 100, 2),
+        "gross_pl": round(gross_profit - gross_loss, 4),
+        "total_trades": len(trades)
+    }
+
+def optimize_asset(symbol, years, param_space):
+    logging.info(f"--- OTTIMIZZAZIONE AVVIATA per {symbol} su {years} anni ---")
+    start_date = f"{years} years ago UTC"
+    try:
+        klines = binance_client.get_historical_klines(symbol, "1h", start_date)
+        if not klines:
+            logging.warning(f"Nessun dato per {symbol}. Salto."); return None
+        df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_av', 'trades', 'tb_base_av', 'tb_quote_av', 'ignore'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        for col in ['open', 'high', 'low', 'close', 'volume']: df[col] = pd.to_numeric(df[col])
+        logging.info(f"Dati per {symbol} caricati ({len(df)} candele).")
+    except Exception as e:
+        logging.error(f"Errore download dati per {symbol}: {e}. Salto."); return None
+
+    keys, values = zip(*param_space.items())
+    param_combinations = [dict(zip(keys, v)) for v in itertools.product(*values)]
+    total_combinations = len(param_combinations)
+    logging.info(f"Verranno testate {total_combinations} combinazioni di parametri.")
+
+    best_profit_factor = -1
+    best_params_package = None
+    
+    for i, params in enumerate(param_combinations):
+        result = run_single_backtest(df.copy(), params)
         
-        # Scarica i dati una sola volta per ogni simbolo
-        data = get_klines_as_df(symbol, "60", limit=1000) # Usiamo dati recenti per l'ottimizzazione
-        # In un sistema reale, scaricheremmo l'intero storico come nel backtester
-        if data.empty:
-            logging.warning(f"Dati per {symbol} non trovati. Salto.")
-            continue
+        # Log di progresso
+        print(f"\r  Test {i+1:>5}/{total_combinations} | PF: {result['profit_factor']:>4.2f} | DD: {result['max_drawdown']:>5.2f}% | P/L: {result['gross_pl']:>9.2f} | Trades: {result['total_trades']:<4}", end="")
 
-        best_profit_factor = -1
-        best_params = None
-        
-        for i, (ema_slow, ema_fast, rr_ratio) in enumerate(param_combinations):
-            # Filtro logico: l'EMA veloce deve essere più veloce della lenta
-            if ema_fast >= ema_slow:
-                continue
+        # La metrica di scelta è il Profit Factor. A parità, scegliamo quello con meno trade (più robusto).
+        if result['profit_factor'] > best_profit_factor and result['total_trades'] > 20: # Minimo 20 trade per validità statistica
+            best_profit_factor = result['profit_factor']
+            best_params_package = {'params': params, 'performance': result}
+        elif result['profit_factor'] == best_profit_factor and best_params_package and result['total_trades'] < best_params_package['performance']['total_trades']:
+             best_params_package = {'params': params, 'performance': result}
 
-            params = {'ema_slow': ema_slow, 'ema_fast': ema_fast, 'rr_ratio': rr_ratio}
-            logging.info(f"Test {i+1}/{len(param_combinations)}: {params}")
-            
-            profit_factor = run_single_optimization(symbol, data, params)
-            
-            if profit_factor > best_profit_factor:
-                best_profit_factor = profit_factor
-                best_params = params
-                logging.info(f"*** Nuovo miglior Profit Factor per {symbol}: {profit_factor:.2f} con parametri {params} ***")
-
-        if best_params:
-            optimal_strategies[symbol] = {
-                "ema_slow": best_params['ema_slow'],
-                "ema_fast": best_params['ema_fast'],
-                "rr_ratio": best_params['rr_ratio'],
-                "profit_factor": round(best_profit_factor, 2)
-            }
-
-    logging.info("--- OTTIMIZZAZIONE COMPLETATA ---")
-    
-    if optimal_strategies:
-        with open(OUTPUT_FILE, 'w') as f:
-            json.dump(optimal_strategies, f, indent=4)
-        logging.info(f"Strategie ottimali salvate nel file: {OUTPUT_FILE}")
-        print(json.dumps(optimal_strategies, indent=4))
-    else:
-        logging.warning("Nessuna strategia ottimale trovata.")
+    print() # Nuova riga dopo il ciclo
+    logging.info(f"--- OTTIMIZZAZIONE COMPLETATA per {symbol} ---")
+    return best_params_package
 
 if __name__ == "__main__":
-    main()
+    with open('parameters_space.json', 'r') as f:
+        param_space = json.load(f)
+
+    # Lista completa degli asset su cui vogliamo trovare una strategia
+    SYMBOLS_TO_OPTIMIZE = [
+        "BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "ADAUSDT", 
+        "AVAXUSDT", "LINKUSDT", "MATICUSDT", "DOTUSDT", "EURUSDT", "GBPUSDT", "XAUUSDT"
+    ]
+    YEARS_TO_OPTIMIZE = 3
+    
+    final_strategies = {"defaults": {}, "groups": {}, "overrides": {}}
+
+    for symbol in SYMBOLS_TO_OPTIMIZE:
+        best_package = optimize_asset(symbol, YEARS_TO_OPTIMIZE, param_space)
+        if best_package:
+            print(f"\nRISULTATO MIGLIORE per {symbol}:")
+            # Uniamo parametri e performance per una visione completa
+            full_results = best_package['params'].copy()
+            full_results.update(best_package['performance'])
+            print(json.dumps(full_results, indent=2))
+            
+            final_strategies["overrides"][symbol] = best_package['params']
+
+    output_filename = f"generated_strategies_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
+    with open(output_filename, 'w') as f:
+        json.dump(final_strategies, f, indent=2)
+    
+    logging.info(f"\nFile di strategie ottimizzate generato: {output_filename}")
