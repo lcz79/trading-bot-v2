@@ -1,4 +1,4 @@
-# database.py - v3.1 (Versione Completa e Corretta)
+# database.py - v3.2 (Aggiunge supporto per dettagli di management)
 import sqlite3
 import logging
 from datetime import datetime, timedelta, timezone
@@ -6,9 +6,11 @@ from datetime import datetime, timedelta, timezone
 DB_NAME = 'trading_signals.db'
 
 def init_db():
-    """Crea la tabella dei segnali se non esiste."""
+    """Crea la tabella dei segnali se non esiste, aggiungendo la colonna mgmt_details."""
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
+    
+    # Crea la tabella se non esiste
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS signals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,10 +23,19 @@ def init_db():
             details TEXT,
             entry_price REAL,
             stop_loss REAL,
-            take_profit REAL
+            take_profit REAL,
+            mgmt_details TEXT
         )
     ''')
-    conn.commit()
+    
+    # Aggiungiamo la colonna se non esiste, per non rompere database esistenti
+    try:
+        cursor.execute('ALTER TABLE signals ADD COLUMN mgmt_details TEXT')
+        conn.commit()
+    except sqlite3.OperationalError:
+        # La colonna esiste già, va bene così
+        pass
+
     conn.close()
 
 def save_signal(signal_data):
@@ -32,8 +43,8 @@ def save_signal(signal_data):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO signals (timestamp, symbol, signal_type, timeframe, strategy, score, details, entry_price, stop_loss, take_profit)
-        VALUES (:timestamp, :symbol, :signal_type, :timeframe, :strategy, :score, :details, :entry_price, :stop_loss, :take_profit)
+        INSERT INTO signals (timestamp, symbol, signal_type, timeframe, strategy, score, details, entry_price, stop_loss, take_profit, mgmt_details)
+        VALUES (:timestamp, :symbol, :signal_type, :timeframe, :strategy, :score, :details, :entry_price, :stop_loss, :take_profit, :mgmt_details)
     ''', signal_data)
     conn.commit()
     conn.close()
@@ -78,5 +89,5 @@ def delete_all_signals():
         logging.error(f"Errore durante la cancellazione dei segnali: {e}")
         return False
 
-# Inizializza il DB all'importazione del modulo, per sicurezza
+# Inizializza il DB all'importazione del modulo
 init_db()
