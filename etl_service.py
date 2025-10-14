@@ -1,87 +1,101 @@
-# etl_service.py - v3.0 (Orchestratore di Strategie Ottimali)
-import pandas as pd
-from pybit.unified_trading import HTTP
-import logging
+# etl_service.py - v2.1 (Supporto per la chiave "groups")
 import time
+import logging
 import json
+import pandas as pd
+from datetime import datetime, timedelta
 
-# Importiamo il nostro nuovo motore di analisi dinamico
-from analysis.market_analysis import run_pullback_analysis
+from data_sources import binance_client
+from analysis import market_analysis
 
 # --- CONFIGURAZIONE ---
-SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "LINKUSDT", "MATICUSDT", "DOTUSDT"]
-TIME_INTERVAL_MIN = 30
-OPTIMAL_STRATEGIES_FILE = "optimal_strategies.json"
-session = HTTP()
+LOG_FILE = 'etl_service.log'
+SYMBOLS = [
+    "BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT",
+    "ADAUSDT", "AVAXUSDT", "LINKUSDT", "MATICUSDT", "DOTUSDT"
+]
+STRATEGIES_FILE = 'optimal_strategies.json'
+LOOP_INTERVAL_MINUTES = 30
 
-def get_klines_as_df(symbol: str, interval: str, limit: int = 200, start_time: int = None):
-    # ... (funzione identica, non serve cambiarla) ...
-    try:
-        params = {"category": "spot", "symbol": symbol, "interval": interval, "limit": limit}
-        if start_time: params["start"] = start_time
-        response = session.get_kline(**params)
-        if response.get('retCode') == 0 and response['result']['list']:
-            data = response['result']['list']
-            df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'turnover'])
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms').dt.tz_localize('UTC')
-            df.set_index('timestamp', inplace=True)
-            df = df[['open', 'high', 'low', 'close', 'volume']].apply(pd.to_numeric)
-            return df.sort_index()
-        else:
-            logging.warning(f"Nessun dato ricevuto da Bybit per {symbol}: {response.get('retMsg')}")
-            return pd.DataFrame()
-    except Exception as e:
-        logging.error(f"Errore recupero k-line per {symbol}: {e}")
-        return pd.DataFrame()
+# --- SETUP LOGGING ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] [%(levelname)s] - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler()
+    ]
+)
 
-def load_optimal_strategies():
-    """Carica il file JSON con le strategie ottimali."""
+# --- FUNZIONI CORE ---
+def load_strategies(filepath):
+    """Carica l'intero file di configurazione delle strategie."""
     try:
-        with open(OPTIMAL_STRATEGIES_FILE, 'r') as f:
+        with open(filepath, 'r') as f:
             strategies = json.load(f)
-        logging.info("File delle strategie ottimali caricato con successo.")
+        logging.info("File delle strategie caricato con successo.")
         return strategies
     except FileNotFoundError:
-        logging.error(f"ERRORE: File '{OPTIMAL_STRATEGIES_FILE}' non trovato. Esegui optimizer.py prima.")
+        logging.error(f"File delle strategie '{filepath}' non trovato.")
         return None
     except json.JSONDecodeError:
-        logging.error(f"ERRORE: File '{OPTIMAL_STRATEGIES_FILE}' non è un JSON valido.")
+        logging.error(f"Errore nel parsing del file JSON '{filepath}'.")
         return None
 
-def run_etl_cycle(optimal_strategies: dict):
-    """Esegue un ciclo di analisi usando le strategie personalizzate."""
-    logging.info(f"=== AVVIO CICLO DI ANALISI OTTIMIZZATA ===")
+def get_params_for_symbol(symbol, settings):
+    """Costruisce i parametri per un simbolo specifico usando la logica multi-asset."""
+    params = settings['defaults'].copy()
     
-    for symbol in SYMBOLS:
-        # Prende i parametri specifici per questo simbolo
-        params = optimal_strategies.get(symbol)
-        if not params:
-            logging.warning(f"Nessuna strategia ottimale trovata per {symbol}. Salto.")
+    asset_class = "crypto"
+    if any(x in symbol for x in ['USD', 'EUR', 'GBP', 'JPY']): asset_class = "forex"
+    if any(x in symbol for x in ['NAS', 'SPX', 'DAX']): asset_class = "indices"
+    if any(x in symbol for x in ['XAU', 'OIL', 'WTI']): asset_class = "commod"
+    
+    # --- MODIFICA CHIAVE ---
+    # Ora cerchiamo i parametri dentro la chiave "groups"
+    if 'groups' in settings and asset_class in settings['groups']:
+        params.update(settings['groups'][asset_class])
+    
+    if symbol in settings.get('overrides', {}):
+        params.update(settings['overrides'][symbol])
+            
+    return params
+
+def run_etl_cycle(symbols, all_settings):
+    """Esegue un ciclo completo di analisi per i simboli dati."""
+    logging.info("=== AVVIO CICLO DI ANALISI ===")
+    
+    for symbol in symbols:
+        params = get_params_for_symbol(symbol, all_settings)
+        logging.info(f"Analisi per {symbol} con parametri: {params}")
+
+        try:
+            klines = binance_client.get_historical_klines(symbol, "1h", "300 hours ago UTC")
+            df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_av', 'trades', 'tb_base_av', 'tb_quote_av', 'ignore'])
+            for col in ['open', 'high', 'low', 'close', 'volume']:
+                df[col] = pd.to_numeric(df[col])
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        except Exception as e:
+            logging.error(f"Errore durante il download dei dati per {symbol}: {e}")
             continue
-        
-        # Scarica i dati necessari (200 periodi sono sufficienti per la EMA più lenta)
-        df_1h = get_klines_as_df(symbol, "60", limit=250)
+
+        try:
+            market_analysis.run_pullback_analysis(symbol, df, params)
+        except Exception as e:
+            logging.error(f"Errore imprevisto durante l'analisi di {symbol}: {e}")
+                
         time.sleep(0.5)
-        
-        if not df_1h.empty:
-            # Lancia l'analisi passando i parametri specifici
-            run_pullback_analysis(symbol, df_1h, params)
-        else:
-            logging.warning(f"Dati per {symbol} non disponibili, salto l'analisi.")
-        
-        time.sleep(1)
+
+    logging.info(f"=== CICLO COMPLETATO. Prossimo ciclo tra {LOOP_INTERVAL_MINUTES} minuti. ===")
+
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(levelname)s] - %(message)s')
-    
-    # Carica le strategie all'avvio
-    strategies = load_optimal_strategies()
-    
-    if strategies:
-        logging.info("--- Avvio Servizio ETL con Strategie Ottimizzate ---")
+    strategy_settings = load_strategies(STRATEGIES_FILE)
+    if strategy_settings:
+        logging.info("--- Avvio Servizio ETL con Strategia Multi-Asset ---")
         while True:
-            run_etl_cycle(strategies)
-            logging.info(f"=== CICLO COMPLETATO. Prossimo ciclo tra {TIME_INTERVAL_MIN} minuti. ===")
-            time.sleep(TIME_INTERVAL_MIN * 60)
+            run_etl_cycle(SYMBOLS, strategy_settings)
+            time.sleep(LOOP_INTERVAL_MINUTES * 60)
     else:
-        logging.error("Impossibile avviare il servizio. Risolvere gli errori del file di configurazione.")
+        logging.error("Impossibile avviare il servizio: errore nel caricamento delle strategie.")

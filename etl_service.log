@@ -1,0 +1,48 @@
+[2025-10-14 14:30:45] [INFO] - File delle strategie caricato con successo.
+[2025-10-14 14:30:45] [INFO] - --- Avvio Servizio ETL con Strategia Multi-Asset ---
+[2025-10-14 14:30:45] [INFO] - === AVVIO CICLO DI ANALISI ===
+[2025-10-14 14:30:45] [INFO] - Analisi per BTCUSDT con parametri: {'ema_slow': 200, 'ema_fast': 20, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.2, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:30:46] [ERROR] - Errore imprevisto durante l'analisi di BTCUSDT: 'ATR_14'
+[2025-10-14 14:30:47] [INFO] - Analisi per ETHUSDT con parametri: {'ema_slow': 200, 'ema_fast': 20, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.2, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:30:47] [ERROR] - Errore imprevisto durante l'analisi di ETHUSDT: 'ATR_14'
+[2025-10-14 14:30:48] [INFO] - Analisi per SOLUSDT con parametri: {'ema_slow': 150, 'ema_fast': 18, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.0, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:30:48] [ERROR] - Errore imprevisto durante l'analisi di SOLUSDT: 'ATR_14'
+[2025-10-14 14:30:49] [INFO] - Analisi per XRPUSDT con parametri: {'ema_slow': 180, 'ema_fast': 21, 'rr_ratio': 1.8, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.0, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:30:50] [ERROR] - Errore imprevisto durante l'analisi di XRPUSDT: 'ATR_14'
+[2025-10-14 14:30:50] [INFO] - Analisi per DOGEUSDT con parametri: {'ema_slow': 150, 'ema_fast': 20, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.0, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:30:51] [ERROR] - Errore imprevisto durante l'analisi di DOGEUSDT: 'ATR_14'
+[2025-10-14 14:30:51] [INFO] - Analisi per ADAUSDT con parametri: {'ema_slow': 200, 'ema_fast': 20, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.0, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:30:52] [ERROR] - Errore imprevisto durante l'analisi di ADAUSDT: 'ATR_14'
+[2025-10-14 14:30:52] [INFO] - Analisi per AVAXUSDT con parametri: {'ema_slow': 180, 'ema_fast': 22, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.0, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:30:53] [ERROR] - Errore imprevisto durante l'analisi di AVAXUSDT: 'ATR_14'
+[2025-10-14 14:30:53] [INFO] - Analisi per LINKUSDT con parametri: {'ema_slow': 180, 'ema_fast': 18, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.0, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:30:54] [ERROR] - Errore imprevisto durante l'analisi di LINKUSDT: 'ATR_14'
+[2025-10-14 14:30:55] [INFO] - Analisi per MATICUSDT con parametri: {'ema_slow': 150, 'ema_fast': 20, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.0, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:30:55] [INFO] - Dati insufficienti per MATICUSDT.
+[2025-10-14 14:30:56] [INFO] - Analisi per DOTUSDT con parametri: {'ema_slow': 170, 'ema_fast': 19, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.0, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:30:56] [ERROR] - Errore imprevisto durante l'analisi di DOTUSDT: 'ATR_14'
+[2025-10-14 14:30:57] [INFO] - === CICLO COMPLETATO. Prossimo ciclo tra 30 minuti. ===
+[2025-10-14 14:32:57] [INFO] - File delle strategie caricato con successo.
+[2025-10-14 14:32:57] [INFO] - --- Avvio Servizio ETL con Strategia Multi-Asset ---
+[2025-10-14 14:32:57] [INFO] - === AVVIO CICLO DI ANALISI ===
+[2025-10-14 14:32:57] [INFO] - Analisi per BTCUSDT con parametri: {'ema_slow': 200, 'ema_fast': 20, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.2, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:32:57] [INFO] - Nessuna opportunità valida (filtri/validazioni) per BTCUSDT.
+[2025-10-14 14:32:58] [INFO] - Analisi per ETHUSDT con parametri: {'ema_slow': 200, 'ema_fast': 20, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.2, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:32:59] [INFO] - Nessuna opportunità valida (filtri/validazioni) per ETHUSDT.
+[2025-10-14 14:32:59] [INFO] - Analisi per SOLUSDT con parametri: {'ema_slow': 150, 'ema_fast': 18, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.0, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:33:00] [INFO] - Nessuna opportunità valida (filtri/validazioni) per SOLUSDT.
+[2025-10-14 14:33:00] [INFO] - Analisi per XRPUSDT con parametri: {'ema_slow': 180, 'ema_fast': 21, 'rr_ratio': 1.8, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.0, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:33:01] [INFO] - Nessuna opportunità valida (filtri/validazioni) per XRPUSDT.
+[2025-10-14 14:33:01] [INFO] - Analisi per DOGEUSDT con parametri: {'ema_slow': 150, 'ema_fast': 20, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.0, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:33:02] [INFO] - Nessuna opportunità valida (filtri/validazioni) per DOGEUSDT.
+[2025-10-14 14:33:03] [INFO] - Analisi per ADAUSDT con parametri: {'ema_slow': 200, 'ema_fast': 20, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.0, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:33:04] [INFO] - Nessuna opportunità valida (filtri/validazioni) per ADAUSDT.
+[2025-10-14 14:33:04] [INFO] - Analisi per AVAXUSDT con parametri: {'ema_slow': 180, 'ema_fast': 22, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.0, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:33:05] [INFO] - Nessuna opportunità valida (filtri/validazioni) per AVAXUSDT.
+[2025-10-14 14:33:05] [INFO] - Analisi per LINKUSDT con parametri: {'ema_slow': 180, 'ema_fast': 18, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.0, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:33:06] [INFO] - Nessuna opportunità valida (filtri/validazioni) per LINKUSDT.
+[2025-10-14 14:33:06] [INFO] - Analisi per MATICUSDT con parametri: {'ema_slow': 150, 'ema_fast': 20, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.0, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:33:07] [INFO] - Dati insufficienti per MATICUSDT.
+[2025-10-14 14:33:07] [INFO] - Analisi per DOTUSDT con parametri: {'ema_slow': 170, 'ema_fast': 19, 'rr_ratio': 2.0, 'ema_slope_min': 2e-05, 'atr_len': 14, 'atr_mult_sl': 1.2, 'atr_mult_tp': 2.0, 'use_stop_entry': True, 'partial_take': True, 'trail_type': 'atr', 'trail_atr_mult': 1.0, 'setup_timeout_bars': 3}
+[2025-10-14 14:33:08] [INFO] - Nessuna opportunità valida (filtri/validazioni) per DOTUSDT.
+[2025-10-14 14:33:08] [INFO] - === CICLO COMPLETATO. Prossimo ciclo tra 30 minuti. ===
