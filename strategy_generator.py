@@ -1,5 +1,5 @@
-# strategy_generator_v2.1.py - Comprehensive Multi-Asset Strategy Generator
-# Esteso con analisi multi-asset, metriche avanzate e salvataggio automatico
+# strategy_generator_v2.2.py - Focused Multi-Asset Strategy Generator
+# Esclude asset già analizzati per ottimizzare il tempo di ricerca.
 
 import pandas as pd
 import logging
@@ -46,11 +46,8 @@ def evaluate_strategy_extended(df_market_data, params, strategy_logic):
     entry_price, stop_loss, take_profit = calculate_sl_tp(df, trend, params)
     if not all([entry_price, stop_loss, take_profit]): return None
     return {
-        "timestamp": df.iloc[-1]['timestamp'],
-        "type": "LONG" if trend == 'UP' else "SHORT",
-        "entry": entry_price,
-        "sl": stop_loss,
-        "tp": take_profit
+        "timestamp": df.iloc[-1]['timestamp'], "type": "LONG" if trend == 'UP' else "SHORT",
+        "entry": entry_price, "sl": stop_loss, "tp": take_profit
     }
 
 
@@ -101,53 +98,72 @@ if __name__ == "__main__":
     with open('hall_of_fame_strategies.json', 'r') as f:
         base_params = json.load(f)['BTCUSDT']['params']
     
-    # --- MODIFICA CHIAVE: LISTA ASSET COMPLETA ---
+    # --- MODIFICA CHIAVE: LISTA ASSET MIRATA ---
     ASSETS = [
-        "BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "ADAUSDT", 
+        # "BTCUSDT", # Escluso: strategia già in hall_of_fame_strategies.json
+        # "ETHUSDT", # Escluso: candidato già trovato, in attesa di ottimizzazione
+        "SOLUSDT", "XRPUSDT", "DOGEUSDT", "ADAUSDT", 
         "AVAXUSDT", "LINKUSDT", "MATICUSDT", "DOTUSDT", "EURUSDT", "GBPUSDT", 
-        "XAUUSDT", # Oro
-        "WTIUSD", "NAS100" # Questi falliranno, ma il codice è robusto
+        "XAUUSDT", # Oro (fallirà su Binance, ma lo lasciamo per completezza)
     ]
 
     YEARS_TO_TEST = 2
     start_date = f"{YEARS_TO_TEST} years ago UTC"
+    
+    # Carichiamo i risultati esistenti per non sovrascriverli
+    try:
+        with open('hall_of_fame_new.json', 'r') as f:
+            top_strategies = json.load(f)
+        logging.info("Caricato 'hall_of_fame_new.json' esistente. Verrà aggiornato.")
+    except FileNotFoundError:
+        top_strategies = {}
+        logging.info("Nessun 'hall_of_fame_new.json' esistente. Verrà creato un nuovo file.")
+
     all_results = []
     for asset in ASSETS:
+        # Controlla se l'asset è già stato analizzato
+        if asset in top_strategies:
+            logging.info(f"Asset {asset} già presente nel file dei risultati. Salto.")
+            continue
+
         logging.info(f"--- ANALISI STRATEGICA PER {asset} ---")
         try:
             klines = binance_client.get_historical_klines(asset, "1h", start_date)
             if not klines:
-                logging.warning(f"Nessun dato per {asset}, potrebbe non essere su Binance. Salto.")
+                logging.warning(f"Nessun dato per {asset}. Salto.")
                 continue
             df = prepare_dataframe(klines)
             logging.info(f"Dati per {asset} caricati ({len(df)} candele).")
         except Exception as e:
             logging.error(f"Errore download dati {asset}: {e}")
             continue
+        
+        asset_run_results = []
         for blueprint in STRATEGY_BLUEPRINTS:
             logging.info(f"Test: {blueprint['name']}...")
             result = run_logic_backtest(df.copy(), base_params, blueprint)
             result['asset'] = asset
             all_results.append(result)
+            asset_run_results.append(result)
+        
+        # Aggiungiamo il miglior risultato per l'asset corrente, se supera la soglia di qualità
+        best_for_asset = sorted(asset_run_results, key=lambda x: x['profit_factor'], reverse=True)[0]
+        if best_for_asset['profit_factor'] > 1.0:
+            top_strategies[asset] = best_for_asset
             
-    sorted_results = sorted(all_results, key=lambda x: x['profit_factor'], reverse=True)
-    results_df = pd.DataFrame(sorted_results)
-    print("\n" + "="*80)
-    print(f" CLASSIFICA STRATEGIE GLOBALI (ultimi {YEARS_TO_TEST} anni)")
-    print("="*80)
-    print(results_df.to_string(index=False))
-    print("="*80)
-    top_strategies = {}
-    for asset in ASSETS:
-        asset_results = [r for r in sorted_results if r['asset'] == asset]
-        if asset_results:
-            best_for_asset = asset_results[0]
-            if best_for_asset['profit_factor'] > 1.0:
-                 top_strategies[asset] = best_for_asset
+    # Stampa la classifica completa di tutti i test eseguiti in questo run
+    if all_results:
+        sorted_results = sorted(all_results, key=lambda x: x['profit_factor'], reverse=True)
+        results_df = pd.DataFrame(sorted_results)
+        print("\n" + "="*80)
+        print(f" CLASSIFICA STRATEGIE (solo per i nuovi asset testati)")
+        print("="*80)
+        print(results_df.to_string(index=False))
+        print("="*80)
     
     with open('hall_of_fame_new.json', 'w') as f:
         json.dump(top_strategies, f, indent=4)
     
     user_login = os.getlogin()
     current_utc_time = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
-    logging.info(f"🏆 Migliori strategie (con PF > 1.0) salvate in hall_of_fame_new.json | By {user_login} | {current_utc_time}")
+    logging.info(f"🏆 File 'hall_of_fame_new.json' aggiornato con i nuovi candidati | By {user_login} | {current_utc_time}")
