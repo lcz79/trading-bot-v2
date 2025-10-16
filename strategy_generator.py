@@ -1,20 +1,20 @@
-# strategy_generator_v2.py - Multi-Asset Strategy Generator v2.0
+# strategy_generator_v2.1.py - Comprehensive Multi-Asset Strategy Generator
 # Esteso con analisi multi-asset, metriche avanzate e salvataggio automatico
 
 import pandas as pd
 import logging
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 import warnings
+import os
+
 from data_sources import binance_client
-
-warnings.simplefilter(action='ignore', category=FutureWarning)
-
 from analysis.market_analysis import (
     add_indicators, check_trend_condition, 
     check_pullback_entry_condition, calculate_sl_tp
 )
 
+warnings.simplefilter(action='ignore', category=FutureWarning)
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
 
@@ -74,7 +74,7 @@ def run_logic_backtest(df_full, params, strategy_logic):
             signal = evaluate_strategy_extended(current_market_data, params, strategy_logic)
             if signal: active_trade = signal.copy()
     if not trades:
-        return {"name": strategy_logic['name'], "profit_factor": 0, "total_trades": 0}
+        return {"name": strategy_logic['name'], "profit_factor": 0, "total_trades": 0, "win_rate": 0, "avg_r_per_trade": 0}
     gross_profit = sum(abs(t['tp'] - t['entry']) for t in trades if t['result'] == 'TP')
     gross_loss = sum(abs(t['sl'] - t['entry']) for t in trades if t['result'] == 'SL')
     profit_factor = gross_profit / gross_loss if gross_loss > 0 else float('inf')
@@ -100,7 +100,15 @@ if __name__ == "__main__":
     ]
     with open('hall_of_fame_strategies.json', 'r') as f:
         base_params = json.load(f)['BTCUSDT']['params']
-    ASSETS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XAUUSDT", "EURUSDT", "NAS100"]
+    
+    # --- MODIFICA CHIAVE: LISTA ASSET COMPLETA ---
+    ASSETS = [
+        "BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "ADAUSDT", 
+        "AVAXUSDT", "LINKUSDT", "MATICUSDT", "DOTUSDT", "EURUSDT", "GBPUSDT", 
+        "XAUUSDT", # Oro
+        "WTIUSD", "NAS100" # Questi falliranno, ma il codice è robusto
+    ]
+
     YEARS_TO_TEST = 2
     start_date = f"{YEARS_TO_TEST} years ago UTC"
     all_results = []
@@ -121,23 +129,25 @@ if __name__ == "__main__":
             result = run_logic_backtest(df.copy(), base_params, blueprint)
             result['asset'] = asset
             all_results.append(result)
+            
     sorted_results = sorted(all_results, key=lambda x: x['profit_factor'], reverse=True)
     results_df = pd.DataFrame(sorted_results)
-    print("\n" + "="*70)
+    print("\n" + "="*80)
     print(f" CLASSIFICA STRATEGIE GLOBALI (ultimi {YEARS_TO_TEST} anni)")
-    print("="*70)
+    print("="*80)
     print(results_df.to_string(index=False))
-    print("="*70)
+    print("="*80)
     top_strategies = {}
     for asset in ASSETS:
-        # Filtra i risultati solo per l'asset corrente e prendi il migliore
         asset_results = [r for r in sorted_results if r['asset'] == asset]
         if asset_results:
             best_for_asset = asset_results[0]
-            # Aggiungiamo un filtro di qualità: salviamo solo se ha senso
             if best_for_asset['profit_factor'] > 1.0:
                  top_strategies[asset] = best_for_asset
     
     with open('hall_of_fame_new.json', 'w') as f:
         json.dump(top_strategies, f, indent=4)
-    logging.info(f"🏆 Migliori strategie (con PF > 1.0) salvate in hall_of_fame_new.json | By {__user_login__} | {__current_utc_time__}")
+    
+    user_login = os.getlogin()
+    current_utc_time = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+    logging.info(f"🏆 Migliori strategie (con PF > 1.0) salvate in hall_of_fame_new.json | By {user_login} | {current_utc_time}")
